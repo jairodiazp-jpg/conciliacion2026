@@ -1,45 +1,43 @@
-function Card({ title, value, tone }) {
+function Card({ title, value, tone, subtitle }) {
   return (
     <article
+      className="summary-card"
       style={{
-        background: "#ffffffcc",
-        border: "1px solid #ffffff",
-        borderLeft: `6px solid ${tone}`,
-        borderRadius: 14,
-        padding: 16,
-        boxShadow: "0 8px 20px #1b433218",
+        "--tone": tone,
       }}
     >
-      <p style={{ margin: 0, color: "#31572c", fontSize: 13 }}>{title}</p>
-      <h2
-        style={{
-          margin: "8px 0 0",
-          fontFamily: "Space Grotesk, sans-serif",
-          fontSize: 28,
-          color: "#132a13",
-        }}
-      >
-        {value}
-      </h2>
+      <span className="summary-accent" />
+      <p className="summary-label">{title}</p>
+      <h2 className="summary-value">{value}</h2>
+      {subtitle && <p className="summary-subtitle">{subtitle}</p>}
     </article>
   );
 }
 
 function SummaryCards({ resumen, loading }) {
   const precision = `${Math.round((Number(resumen.precision_estimada || 0) * 100))}%`;
+  const porcentajeCruzados = loading ? "..." : `${resumen.porcentaje_cruzados || 0}% del total`;
+  const porcentajePosibles = loading ? "..." : `${resumen.porcentaje_posibles || 0}% del total`;
 
   return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
-        gap: 12,
-        marginBottom: 14,
-      }}
-    >
-      <Card title="Total cruzados" value={loading ? "..." : resumen.cruzados} tone="#4f772d" />
-      <Card title="Total posibles" value={loading ? "..." : resumen.posibles} tone="#bc6c25" />
-      <Card title="Precision estimada" value={loading ? "..." : precision} tone="#386641" />
+    <div className="summary-grid">
+      <Card 
+        title="Total cruzados" 
+        value={loading ? "..." : resumen.cruzados} 
+        tone="#2563eb"
+        subtitle={porcentajeCruzados}
+      />
+      <Card 
+        title="Total posibles" 
+        value={loading ? "..." : resumen.posibles} 
+        tone="#f59e0b"
+        subtitle={porcentajePosibles}
+      />
+      <Card 
+        title="Precisión estimada" 
+        value={loading ? "..." : precision} 
+        tone="#10b981"
+      />
     </div>
   );
 }

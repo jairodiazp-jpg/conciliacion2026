@@ -45,6 +45,7 @@ class ConciliadorContable:
 
     def procesar(self) -> dict[str, Any]:
         entries = self._extraer_movimientos()
+        self.total_entries = len(entries)
 
         upper_entries = [entry for entry in entries if entry.section == "upper"]
         lower_entries = [entry for entry in entries if entry.section == "lower"]
@@ -507,10 +508,17 @@ class ConciliadorContable:
         total = cruzados + posibles
         precision = (cruzados / total) if total else 0.0
 
+        total_entries = getattr(self, "total_entries", 0)
+        porcentaje_cruzados = (cruzados / total_entries * 100) if total_entries else 0.0
+        porcentaje_posibles = (posibles / total_entries * 100) if total_entries else 0.0
+
         return {
             "cruzados": cruzados,
             "posibles": posibles,
             "precision_estimada": round(precision, 2),
+            "total_movements": total_entries,
+            "porcentaje_cruzados": round(porcentaje_cruzados, 2),
+            "porcentaje_posibles": round(porcentaje_posibles, 2),
         }
 
     def _construir_alertas(self, resumen: dict[str, Any]) -> list[str]:

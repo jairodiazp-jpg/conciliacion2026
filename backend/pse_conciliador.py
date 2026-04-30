@@ -360,6 +360,25 @@ class PseConciliador:
         )
         return candidates[0] if candidates else None
 
+    def _find_exact_match_for_target(self, target: Movimiento, pool: list[Movimiento]) -> Movimiento | None:
+        candidates = [
+            candidate
+            for candidate in pool
+            if not candidate.matched
+            and candidate.raw_date is not None
+            and self._date_gap_days(target.raw_date, candidate.raw_date) is not None
+            and self._date_gap_days(target.raw_date, candidate.raw_date) <= self.date_tolerance_days
+            and self._within_value_tolerance(target.value, candidate.value)
+        ]
+        candidates.sort(
+            key=lambda item: (
+                self._date_gap_days(target.raw_date, item.raw_date) or 999,
+                abs(abs(target.value) - abs(item.value)),
+                item.row,
+            )
+        )
+        return candidates[0] if candidates else None
+
     def _find_best_subset(
         self,
         entry: Movimiento,
@@ -583,6 +602,57 @@ class PseConciliador:
             difference=difference,
         )
 
+    def _register_match_n_to_1(
+        self,
+        cruce_entry: Movimiento,
+        pse_entries: list[Movimiento],
+        state: str,
+        difference: float | None,
+    ) -> list[MatchResult]:
+        group_id = f"GRP-{self.group_counter:04d}"
+        self.group_counter += 1
+
+        cruce_entry.matched = True
+        for entry in pse_entries:
+            entry.matched = True
+
+        total_pse = sum(abs(entry.value) for entry in pse_entries)
+        pse_values = self._build_associated_values(pse_entries)
+        cruce_reference = f"{cruce_entry.sheet_name}:fila {cruce_entry.row}={self._currency_string(cruce_entry.value)}"
+        comment = (
+            f"Conciliado N:1 contra {cruce_reference}. "
+            f"Pagos PSE asociados ({len(pse_entries)}): {pse_values}. "
+            f"Total PSE {self._currency_string(total_pse)}"
+        )
+        if difference is not None and difference > 0:
+            comment = f"{comment}. Diferencia {self._currency_string(difference)}"
+
+        self.logs.append(
+            {
+                "tipo": "match_n_1",
+                "valor": round(abs(cruce_entry.value), 2),
+                "fecha": cruce_entry.raw_date.isoformat() if cruce_entry.raw_date else None,
+                "confianza": 0.98 if difference in (None, 0.0) else 0.7,
+                "detalle": f"{state} para {cruce_reference} usando pagos PSE: {pse_values}",
+            }
+        )
+
+        results: list[MatchResult] = []
+        for pse_entry in pse_entries:
+            results.append(
+                MatchResult(
+                    pse_entry=pse_entry,
+                    matched_entries=[cruce_entry],
+                    state=state,
+                    group_id=group_id,
+                    comment=comment,
+                    account_label=cruce_entry.account_label,
+                    values_associated=cruce_reference,
+                    difference=difference,
+                )
+            )
+        return results
+
     def _conciliar(self, pse_entries: list[Movimiento], cruce_entries: list[Movimiento]) -> list[MatchResult]:
         results: list[MatchResult] = []
         ordered_entries = sorted(pse_entries, key=lambda item: abs(item.value), reverse=True)
@@ -601,6 +671,34 @@ class PseConciliador:
             if subset is not None:
                 state = "Conciliado 1:N" if is_exact and len(subset) > 1 else "Conciliación parcial"
                 results.append(self._register_match(entry, subset, state, difference))
+
+        remaining_cruces = sorted(
+            [entry for entry in cruce_entries if not entry.matched],
+            key=lambda item: abs(item.value),
+            reverse=True,
+        )
+
+        for cruce_entry in remaining_cruces:
+            if cruce_entry.matched:
+                continue
+
+            available_pse = [entry for entry in pse_entries if not entry.matched]
+            if not available_pse:
+                break
+
+            exact_pse = self._find_exact_match_for_target(cruce_entry, available_pse)
+            if exact_pse is not None:
+                results.extend(self._register_match_n_to_1(cruce_entry, [exact_pse], "Conciliado N:1", None))
+                continue
+
+            candidates = self._candidate_pool(cruce_entry, available_pse)
+            subset, difference, is_exact = self._find_best_subset(cruce_entry, candidates)
+            if subset is not None:
+                state = "Conciliado N:1" if is_exact else "Conciliación parcial"
+                results.extend(self._register_match_n_to_1(cruce_entry, subset, state, difference))
+
+        for entry in ordered_entries:
+            if entry.matched:
                 continue
 
             results.append(

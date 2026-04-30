@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import base64
 import unicodedata
+from datetime import date, datetime
 from dataclasses import dataclass
 from io import BytesIO
 from typing import Any
 
 from conciliador import ConciliadorContable
 from openpyxl import load_workbook
+from openpyxl.utils.datetime import from_excel
 from pse_conciliador import PseConciliador
 
 
@@ -70,6 +72,92 @@ class ProcesadorIntegrado:
         if text.lower() in current.lower():
             return current
         return f"{current} | {text}"
+
+    def _parse_row_date(self, row) -> datetime | None:
+        for cell in row:
+            value = cell.value
+            if isinstance(value, datetime):
+                return value
+            if isinstance(value, date):
+                return datetime.combine(value, datetime.min.time())
+            if getattr(cell, "is_date", False) and isinstance(value, (int, float)):
+                try:
+                    parsed = from_excel(value)
+                    if isinstance(parsed, datetime):
+                        return parsed
+                    if isinstance(parsed, date):
+                        return datetime.combine(parsed, datetime.min.time())
+                except Exception:
+                    continue
+        return None
+
+    def _parse_row_value(self, row) -> float | None:
+        for cell in row:
+            value = cell.value
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                if abs(float(value)) >= 0.0001:
+                    return float(value)
+        return None
+
+    def _row_contains_pse_marker(self, row) -> bool:
+        texts = [self._normalizar_texto(str(cell.value)) for cell in row if isinstance(cell.value, str)]
+        return any("pago virtual pse" in text for text in texts)
+
+    def _annotate_pse_rows_in_contable(self, contable_b64: str, pse_dataset: list[dict[str, Any]]) -> str:
+        workbook = load_workbook(filename=BytesIO(base64.b64decode(contable_b64)))
+        annotation_columns = self._index_annotation_columns(workbook)
+
+        for pse_row in pse_dataset:
+            group_id = str(pse_row.get("id_grupo_conciliacion") or "").strip()
+            if not group_id:
+                continue
+
+            try:
+                pse_value = abs(float(pse_row.get("valor")))
+            except (TypeError, ValueError):
+                continue
+
+            pse_date = str(pse_row.get("fecha") or "").strip()
+            if not pse_date:
+                continue
+
+            pseudo_comment = str(pse_row.get("comentario_conciliacion") or "").strip()
+            pseudo_values = str(pse_row.get("valores_asociados") or "").strip()
+            group_text = f"[{group_id}]"
+
+            for sheet in workbook.worksheets:
+                comment_col, observation_col = annotation_columns.get(sheet.title, (None, None))
+                for row in sheet.iter_rows(min_row=1, max_row=sheet.max_row):
+                    if not self._row_contains_pse_marker(row):
+                        continue
+
+                    row_date = self._parse_row_date(row)
+                    if row_date is None:
+                        continue
+                    row_value = self._parse_row_value(row)
+                    if row_value is None:
+                        continue
+
+                    row_date_text = row_date.date().isoformat() if isinstance(row_date, datetime) else row_date.isoformat()
+                    if row_date_text != pse_date:
+                        continue
+                    if abs(abs(row_value) - pse_value) > self.value_tolerance:
+                        continue
+
+                    if comment_col is not None:
+                        comment_cell = sheet.cell(row=row[0].row, column=comment_col)
+                        comment_text = f"Cruce PSE {group_text} - {pseudo_comment if pseudo_comment else pseudo_values}"
+                        comment_cell.value = self._append_text_once(comment_cell.value, comment_text)
+
+                    if observation_col is not None:
+                        observation_cell = sheet.cell(row=row[0].row, column=observation_col)
+                        base_observation = pseudo_values if pseudo_values else "Reclasificacion PSE detectada"
+                        observation_text = f"{group_text} {base_observation}".strip()
+                        observation_cell.value = self._append_text_once(observation_cell.value, observation_text)
+
+        output_stream = BytesIO()
+        workbook.save(output_stream)
+        return base64.b64encode(output_stream.getvalue()).decode("utf-8")
 
     def _merge_pse_comments_into_contable(self, contable_b64: str, dataset_cruces: list[dict[str, Any]]) -> str:
         workbook = load_workbook(filename=BytesIO(base64.b64decode(contable_b64)))
@@ -151,6 +239,10 @@ class ProcesadorIntegrado:
         contable_result["file"] = self._merge_pse_comments_into_contable(
             contable_result["file"],
             pse_result.get("dataset_cruces", []),
+        )
+        contable_result["file"] = self._annotate_pse_rows_in_contable(
+            contable_result["file"],
+            pse_result.get("dataset", []),
         )
 
         files: list[dict[str, str]] = [

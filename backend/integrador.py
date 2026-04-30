@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import base64
+import unicodedata
 from dataclasses import dataclass
+from io import BytesIO
 from typing import Any
 
 from conciliador import ConciliadorContable
+from openpyxl import load_workbook
 from pse_conciliador import PseConciliador
 
 
@@ -29,21 +33,99 @@ class ProcesadorIntegrado:
         self.date_tolerance_days = date_tolerance_days
         self.value_tolerance = value_tolerance
 
+    def _normalizar_texto(self, value: str) -> str:
+        normalized = unicodedata.normalize("NFKD", value)
+        no_accents = "".join(char for char in normalized if not unicodedata.combining(char))
+        return no_accents.strip().lower()
+
+    def _index_annotation_columns(self, workbook) -> dict[str, tuple[int | None, int | None]]:
+        indexed: dict[str, tuple[int | None, int | None]] = {}
+        for sheet in workbook.worksheets:
+            comment_col: int | None = None
+            observation_col: int | None = None
+
+            max_scan_row = min(sheet.max_row, 25)
+            for row in sheet.iter_rows(min_row=1, max_row=max_scan_row, min_col=1, max_col=sheet.max_column):
+                for cell in row:
+                    if not isinstance(cell.value, str):
+                        continue
+                    header = self._normalizar_texto(cell.value)
+
+                    if comment_col is None and header in {"comentario", "comentarios"}:
+                        comment_col = cell.column
+                    if observation_col is None and header in {"observacion", "observaciones"}:
+                        observation_col = cell.column
+
+                if comment_col is not None and observation_col is not None:
+                    break
+
+            indexed[sheet.title] = (comment_col, observation_col)
+
+        return indexed
+
+    def _append_text_once(self, current_value: Any, text: str) -> str:
+        current = str(current_value).strip() if current_value is not None else ""
+        if not current:
+            return text
+        if text.lower() in current.lower():
+            return current
+        return f"{current} | {text}"
+
+    def _merge_pse_comments_into_contable(self, contable_b64: str, dataset_cruces: list[dict[str, Any]]) -> str:
+        workbook = load_workbook(filename=BytesIO(base64.b64decode(contable_b64)))
+        annotation_columns = self._index_annotation_columns(workbook)
+
+        for row in dataset_cruces:
+            sheet_name = row.get("sheet")
+            excel_row = row.get("row")
+            estado = str(row.get("estado_conciliacion") or "").strip()
+            comentario = str(row.get("comentario_conciliacion") or "").strip()
+            valores = str(row.get("valores_asociados") or "").strip()
+
+            if not sheet_name or sheet_name not in workbook.sheetnames:
+                continue
+            if estado == "Sin coincidencia":
+                continue
+            if not comentario and not valores:
+                continue
+
+            try:
+                excel_row_int = int(excel_row)
+            except (TypeError, ValueError):
+                continue
+
+            if excel_row_int < 1:
+                continue
+
+            sheet = workbook[sheet_name]
+            comment_col, observation_col = annotation_columns.get(sheet_name, (None, None))
+
+            if comment_col is not None:
+                comment_cell = sheet.cell(row=excel_row_int, column=comment_col)
+                comment_text = f"Cruce PSE - {comentario}" if comentario else f"Cruce PSE - {valores}"
+                comment_cell.value = self._append_text_once(comment_cell.value, comment_text)
+
+            if observation_col is not None:
+                observation_cell = sheet.cell(row=excel_row_int, column=observation_col)
+                observation_text = (
+                    f"Reclasificacion PSE: {valores}"
+                    if valores
+                    else "Reclasificacion PSE detectada"
+                )
+                observation_cell.value = self._append_text_once(observation_cell.value, observation_text)
+
+        output_stream = BytesIO()
+        workbook.save(output_stream)
+        return base64.b64encode(output_stream.getvalue()).decode("utf-8")
+
     def procesar(self) -> dict[str, Any]:
         contable_result: dict[str, Any] | None = None
         pse_result: dict[str, Any] | None = None
-        files: list[dict[str, str]] = []
         logs: list[dict[str, Any]] = []
         alertas: list[str] = []
 
         if self.contable_bytes is not None:
             contable_result = ConciliadorContable(self.contable_bytes).procesar()
-            files.append(
-                {
-                    "name": "CONCILIACION_CONTABLE.xlsx",
-                    "file": contable_result["file"],
-                }
-            )
             logs.extend(contable_result.get("logs", []))
             alertas.extend(contable_result.get("alertas", []))
 
@@ -54,20 +136,6 @@ class ProcesadorIntegrado:
                 date_tolerance_days=self.date_tolerance_days,
                 value_tolerance=self.value_tolerance,
             ).procesar()
-            files.append(
-                {
-                    "name": pse_result.get("output_name", "PSE_CONCILIADO.xlsx"),
-                    "file": pse_result["file"],
-                }
-            )
-            secondary_file = pse_result.get("secondary_file")
-            if secondary_file:
-                files.append(
-                    {
-                        "name": pse_result.get("secondary_output_name", "CRUCES_CONCILIADOS.xlsx"),
-                        "file": secondary_file,
-                    }
-                )
             logs.extend(pse_result.get("logs", []))
             alertas.extend(pse_result.get("alertas", []))
 
@@ -78,6 +146,22 @@ class ProcesadorIntegrado:
             return contable_result
         if contable_result is None and pse_result is not None:
             return pse_result
+
+        contable_result["file"] = self._merge_pse_comments_into_contable(
+            contable_result["file"],
+            pse_result.get("dataset_cruces", []),
+        )
+
+        files: list[dict[str, str]] = [
+            {
+                "name": "CONCILIACION_CONTABLE.xlsx",
+                "file": contable_result["file"],
+            },
+            {
+                "name": pse_result.get("output_name", "PSE_CONCILIADO.xlsx"),
+                "file": pse_result["file"],
+            },
+        ]
 
         resumen = {
             "cruzados": int(contable_result.get("resumen", {}).get("cruzados", 0)) + int(pse_result.get("resumen", {}).get("cruzados", 0)),

@@ -41,6 +41,14 @@ ACCOUNT_ALIASES = {
     "numero cuenta",
     "número cuenta",
 }
+DESCRIPTION_ALIASES = {
+    "descripcion",
+    "descripción",
+    "detalle",
+    "concepto",
+    "glosa",
+}
+PSE_DESCRIPTION_MARKER = "pago virtual pse"
 
 VALUE_TOLERANCE_DEFAULT = 0.01
 DATE_TOLERANCE_DEFAULT = 1
@@ -57,6 +65,7 @@ class SheetSchema:
     date_col: int
     value_col: int
     account_col: int | None = None
+    description_col: int | None = None
 
 
 @dataclass
@@ -107,7 +116,11 @@ class PseConciliador:
 
     def procesar(self) -> dict[str, Any]:
         self.pse_entries = self._extract_movements(self.pse_workbook, self.pse_schemas)
-        self.cruces_entries = self._extract_movements(self.cruces_workbook, self.cruces_schemas)
+        self.cruces_entries = self._extract_movements(
+            self.cruces_workbook,
+            self.cruces_schemas,
+            only_virtual_pse=True,
+        )
         self.match_results = self._conciliar(self.pse_entries, self.cruces_entries)
 
         self._escribir_enriquecimiento_pse(self.match_results)
@@ -216,6 +229,8 @@ class PseConciliador:
                     header_map["value"] = cell.column
                 if (header in ACCOUNT_ALIASES or any(alias in header for alias in ACCOUNT_ALIASES)) and "account" not in header_map:
                     header_map["account"] = cell.column
+                if (header in DESCRIPTION_ALIASES or any(alias in header for alias in DESCRIPTION_ALIASES)) and "description" not in header_map:
+                    header_map["description"] = cell.column
 
             if "date" in header_map and "value" in header_map:
                 return SheetSchema(
@@ -223,8 +238,18 @@ class PseConciliador:
                     date_col=header_map["date"],
                     value_col=header_map["value"],
                     account_col=header_map.get("account"),
+                    description_col=header_map.get("description"),
                 )
         return None
+
+    def _is_virtual_pse_row(self, row, schema: SheetSchema) -> bool:
+        if schema.description_col is None:
+            return False
+        if schema.description_col - 1 >= len(row):
+            return False
+
+        description_text = self._normalizar_texto(self._stringify(row[schema.description_col - 1].value))
+        return PSE_DESCRIPTION_MARKER in description_text
 
     def _resolve_account_label(self, sheet: Worksheet, row, schema: SheetSchema) -> str:
         if schema.account_col is not None:
@@ -244,6 +269,8 @@ class PseConciliador:
         self,
         workbook,
         schema_registry: dict[str, SheetSchema],
+        *,
+        only_virtual_pse: bool = False,
     ) -> list[Movimiento]:
         movements: list[Movimiento] = []
 
@@ -255,6 +282,9 @@ class PseConciliador:
             schema_registry[sheet.title] = schema
 
             for row in sheet.iter_rows(min_row=schema.header_row + 1, max_row=sheet.max_row):
+                if only_virtual_pse and not self._is_virtual_pse_row(row, schema):
+                    continue
+
                 date_cell = row[schema.date_col - 1] if schema.date_col - 1 < len(row) else None
                 value_cell = row[schema.value_col - 1] if schema.value_col - 1 < len(row) else None
                 if date_cell is None or value_cell is None:
@@ -407,31 +437,6 @@ class PseConciliador:
                 result_map[(entry.sheet_name, entry.row)] = result
         return result_map
 
-    def _find_result_for_movement(self, movement: Movimiento) -> MatchResult | None:
-        # Fallback: try to find a match_result by comparing date and value within tolerances
-        for result in self.match_results:
-            # Check pse_entry first
-            pse = result.pse_entry
-            if pse.sheet_name == movement.sheet_name and pse.row == movement.row:
-                return result
-
-            # Compare against matched entries
-            for entry in result.matched_entries:
-                if entry.sheet_name == movement.sheet_name and entry.row == movement.row:
-                    return result
-
-                # If row differs (different exports), compare by date and value tolerances
-                if (
-                    movement.raw_date is not None
-                    and entry.raw_date is not None
-                    and self._date_gap_days(movement.raw_date, entry.raw_date) is not None
-                    and self._date_gap_days(movement.raw_date, entry.raw_date) <= self.date_tolerance_days
-                    and self._within_value_tolerance(movement.value, entry.value)
-                ):
-                    return result
-
-        return None
-
     def _prepare_output_sheet(self, sheet: Worksheet, header_row: int, headers: list[str]) -> int:
         start_column = sheet.max_column + 1
         for offset, header in enumerate(headers):
@@ -467,9 +472,6 @@ class PseConciliador:
                 continue
 
             result = result_map.get((movement.sheet_name, movement.row))
-            # Fallback: if no exact map by sheet+row, try to find by date/value heuristics
-            if result is None:
-                result = self._find_result_for_movement(movement)
             if result is None:
                 state = "Sin coincidencia"
                 account_label = ""
@@ -551,24 +553,13 @@ class PseConciliador:
         total_match_value = sum(abs(entry.value) for entry in matched_entries)
 
         if state == "Conciliado 1:1":
-            comment = (
-                f"Conciliado con cuenta {account_label} por valor total {self._currency_string(total_match_value)} "
-                f"(1 transacción contable). Pertenece a PSE {pse_entry.sheet_name}:fila {pse_entry.row} "
-                f"valor {self._currency_string(pse_entry.value)}"
-            )
+            comment = f"Conciliado con cuenta {account_label} por valor total {self._currency_string(total_match_value)} (1 transacción contable)"
             log_type = "match_1_1"
         elif state == "Conciliado 1:N":
-            comment = (
-                f"Conciliado con cuenta {account_label} por valor total {self._currency_string(total_match_value)} "
-                f"({len(matched_entries)} transacciones contables). Pertenece a PSE {pse_entry.sheet_name}:fila {pse_entry.row} "
-                f"valor {self._currency_string(pse_entry.value)}"
-            )
+            comment = f"Conciliado con cuenta {account_label} por valor total {self._currency_string(total_match_value)} ({len(matched_entries)} transacciones contables)"
             log_type = "match_1_n"
         else:
-            comment = (
-                f"Conciliación parcial - diferencia de {self._currency_string(difference or 0.0)}. "
-                f"Pertenece a PSE {pse_entry.sheet_name}:fila {pse_entry.row} valor {self._currency_string(pse_entry.value)}"
-            )
+            comment = f"Conciliación parcial - diferencia de {self._currency_string(difference or 0.0)}"
             log_type = "partial"
 
         self.logs.append(

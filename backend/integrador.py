@@ -128,9 +128,6 @@ class ProcesadorIntegrado:
             for sheet in workbook.worksheets:
                 comment_col, observation_col = annotation_columns.get(sheet.title, (None, None))
                 for row in sheet.iter_rows(min_row=1, max_row=sheet.max_row):
-                    if not self._row_contains_pse_marker(row):
-                        continue
-
                     row_date = self._parse_row_date(row)
                     if row_date is None:
                         continue

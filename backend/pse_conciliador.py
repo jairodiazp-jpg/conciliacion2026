@@ -407,6 +407,31 @@ class PseConciliador:
                 result_map[(entry.sheet_name, entry.row)] = result
         return result_map
 
+    def _find_result_for_movement(self, movement: Movimiento) -> MatchResult | None:
+        # Fallback: try to find a match_result by comparing date and value within tolerances
+        for result in self.match_results:
+            # Check pse_entry first
+            pse = result.pse_entry
+            if pse.sheet_name == movement.sheet_name and pse.row == movement.row:
+                return result
+
+            # Compare against matched entries
+            for entry in result.matched_entries:
+                if entry.sheet_name == movement.sheet_name and entry.row == movement.row:
+                    return result
+
+                # If row differs (different exports), compare by date and value tolerances
+                if (
+                    movement.raw_date is not None
+                    and entry.raw_date is not None
+                    and self._date_gap_days(movement.raw_date, entry.raw_date) is not None
+                    and self._date_gap_days(movement.raw_date, entry.raw_date) <= self.date_tolerance_days
+                    and self._within_value_tolerance(movement.value, entry.value)
+                ):
+                    return result
+
+        return None
+
     def _prepare_output_sheet(self, sheet: Worksheet, header_row: int, headers: list[str]) -> int:
         start_column = sheet.max_column + 1
         for offset, header in enumerate(headers):
@@ -442,6 +467,9 @@ class PseConciliador:
                 continue
 
             result = result_map.get((movement.sheet_name, movement.row))
+            # Fallback: if no exact map by sheet+row, try to find by date/value heuristics
+            if result is None:
+                result = self._find_result_for_movement(movement)
             if result is None:
                 state = "Sin coincidencia"
                 account_label = ""

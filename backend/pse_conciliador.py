@@ -523,13 +523,24 @@ class PseConciliador:
         total_match_value = sum(abs(entry.value) for entry in matched_entries)
 
         if state == "Conciliado 1:1":
-            comment = f"Conciliado con cuenta {account_label} por valor total {self._currency_string(total_match_value)} (1 transacción contable)"
+            comment = (
+                f"Conciliado con cuenta {account_label} por valor total {self._currency_string(total_match_value)} "
+                f"(1 transacción contable). Pertenece a PSE {pse_entry.sheet_name}:fila {pse_entry.row} "
+                f"valor {self._currency_string(pse_entry.value)}"
+            )
             log_type = "match_1_1"
         elif state == "Conciliado 1:N":
-            comment = f"Conciliado con cuenta {account_label} por valor total {self._currency_string(total_match_value)} ({len(matched_entries)} transacciones contables)"
+            comment = (
+                f"Conciliado con cuenta {account_label} por valor total {self._currency_string(total_match_value)} "
+                f"({len(matched_entries)} transacciones contables). Pertenece a PSE {pse_entry.sheet_name}:fila {pse_entry.row} "
+                f"valor {self._currency_string(pse_entry.value)}"
+            )
             log_type = "match_1_n"
         else:
-            comment = f"Conciliación parcial - diferencia de {self._currency_string(difference or 0.0)}"
+            comment = (
+                f"Conciliación parcial - diferencia de {self._currency_string(difference or 0.0)}. "
+                f"Pertenece a PSE {pse_entry.sheet_name}:fila {pse_entry.row} valor {self._currency_string(pse_entry.value)}"
+            )
             log_type = "partial"
 
         self.logs.append(

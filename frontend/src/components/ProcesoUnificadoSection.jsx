@@ -26,9 +26,8 @@ function downloadBase64(fileContent, name) {
 }
 
 function ProcesoUnificadoSection({ apiBase }) {
-  const [contableFile, setContableFile] = useState(null);
   const [pseFile, setPseFile] = useState(null);
-  const [crucesFile, setCrucesFile] = useState(null);
+  const [memoFile, setMemoFile] = useState(null);
   const [dateTolerance, setDateTolerance] = useState(1);
   const [valueTolerance, setValueTolerance] = useState(0.01);
   const [loading, setLoading] = useState(false);
@@ -54,8 +53,8 @@ function ProcesoUnificadoSection({ apiBase }) {
   };
 
   const handleProcess = async () => {
-    if (!contableFile && (!pseFile || !crucesFile)) {
-      setError("Selecciona el archivo contable o la pareja PSE + cruces contables.");
+    if (!pseFile || !memoFile) {
+      setError("Selecciona el archivo PSE y el archivo de conciliación contable.");
       return;
     }
 
@@ -64,14 +63,12 @@ function ProcesoUnificadoSection({ apiBase }) {
 
     try {
       const formData = new FormData();
-      if (contableFile) {
-        formData.append("file", contableFile);
-      }
       if (pseFile) {
         formData.append("pse_file", pseFile);
       }
-      if (crucesFile) {
-        formData.append("cruces_file", crucesFile);
+      if (memoFile) {
+        formData.append("file", memoFile);
+        formData.append("cruces_file", memoFile);
       }
       formData.append("tolerance_days", String(dateTolerance));
       formData.append("tolerance_value", String(valueTolerance));
@@ -97,9 +94,8 @@ function ProcesoUnificadoSection({ apiBase }) {
   };
 
   const handleReset = () => {
-    setContableFile(null);
     setPseFile(null);
-    setCrucesFile(null);
+    setMemoFile(null);
     setError("");
     setResult(null);
   };
@@ -112,43 +108,48 @@ function ProcesoUnificadoSection({ apiBase }) {
       <div className="brand-row" style={{ marginBottom: 0 }}>
         <span className="brand-pill">Proceso unificado</span>
         <span style={{ color: "var(--muted)", fontSize: 13 }}>
-          Un solo envío para conciliación contable y PSE
+          Un solo envío para conciliación PSE y memorando de cruces
         </span>
       </div>
 
       <div>
         <p className="eyebrow">Flujo único</p>
         <h2 className="title" style={{ maxWidth: "18ch", fontSize: "clamp(1.7rem, 3vw, 2.6rem)" }}>
-          Una sola corrida para todos los cruces
+          Dos archivos, un solo cruce
         </h2>
         <p className="subtitle" style={{ maxWidth: "74ch" }}>
-          Carga el archivo contable existente y, si aplica, la pareja PSE + cruces contables. El backend ejecuta
-          ambos motores en una sola llamada y devuelve los archivos conciliados sin alterar la lógica actual.
+          Carga el archivo PSE y el memorando de conciliación contable. El backend cruza los valores exactos entre
+          ambos archivos y devuelve el resultado conciliado sin alterar el formato original.
         </p>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
-        <input
-          className="input-file"
-          type="file"
-          accept=".xlsx"
-          onChange={(event) => setContableFile(event.target.files?.[0] || null)}
-          disabled={loading}
-        />
-        <input
-          className="input-file"
-          type="file"
-          accept=".xlsx"
-          onChange={(event) => setPseFile(event.target.files?.[0] || null)}
-          disabled={loading}
-        />
-        <input
-          className="input-file"
-          type="file"
-          accept=".xlsx"
-          onChange={(event) => setCrucesFile(event.target.files?.[0] || null)}
-          disabled={loading}
-        />
+        <div style={{ display: "grid", gap: 8 }}>
+          <input
+            className="input-file"
+            type="file"
+            accept=".xlsx"
+            aria-label="Archivo PSE"
+            onChange={(event) => setPseFile(event.target.files?.[0] || null)}
+            disabled={loading}
+          />
+          <span style={{ color: "var(--muted)", fontSize: 12, lineHeight: 1.4 }}>
+            Sube aquí el archivo PSE.
+          </span>
+        </div>
+        <div style={{ display: "grid", gap: 8 }}>
+          <input
+            className="input-file"
+            type="file"
+            accept=".xlsx"
+            aria-label="Archivo de conciliación contable"
+            onChange={(event) => setMemoFile(event.target.files?.[0] || null)}
+            disabled={loading}
+          />
+          <span style={{ color: "var(--muted)", fontSize: 12, lineHeight: 1.4 }}>
+            Sube aquí el archivo de conciliación contable o memorando de cruces.
+          </span>
+        </div>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
@@ -188,7 +189,7 @@ function ProcesoUnificadoSection({ apiBase }) {
 
       {error && <p className="error">{error}</p>}
 
-      {(loading || result || contableFile || pseFile || crucesFile) && (
+      {(loading || result || pseFile || memoFile) && (
         <div style={{ display: "grid", gap: 14 }}>
           {contableResult && <Dashboard data={contableResult} loading={loading} />}
 

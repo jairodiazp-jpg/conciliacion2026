@@ -132,12 +132,14 @@ class ConciliadorContable:
 
         if comment_col is not None:
             comment_cell = sheet.cell(row=entry.row, column=comment_col)
-            comment_text = f"Posible Cruze - {self._comment_account_text(entry.sheet_name, other_sheet_name)}"
+            # Corregir y especificar texto de comentario
+            comment_text = f"Posible Cruce - {self._comment_account_text(entry.sheet_name, other_sheet_name)}"
             comment_cell.value = self._append_text_once(comment_cell.value, comment_text)
 
         if observation_col is not None:
             observation_cell = sheet.cell(row=entry.row, column=observation_col)
-            observation_text = "Reclacificacion de esta cuenta a esta otra"
+            # Escribir observación más informativa indicando cuenta origen -> destino
+            observation_text = f"Reclasificación: {self._comment_account_text(entry.sheet_name, other_sheet_name)}"
             observation_cell.value = self._append_text_once(observation_cell.value, observation_text)
 
     def _annotate_pair(self, left: LedgerEntry, right: LedgerEntry) -> None:

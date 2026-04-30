@@ -32,6 +32,43 @@ Proyecto fullstack stateless para conciliacion contable de archivos Excel (.xlsx
 5. Preservacion de formato:
    - Solo colorea celda de valor y etiqueta columna siguiente
 
+## Conciliacion PSE
+
+Se agrego un flujo opcional y desacoplado para conciliar un archivo PSE contra un archivo de cruces contables sin alterar la estructura original del PSE.
+
+### Salida
+
+- Archivos conciliados:
+  - PSE_CONCILIADO.xlsx
+  - CRUCES_CONCILIADOS.xlsx
+- Columnas nuevas al final en ambos archivos:
+  - Estado_Conciliacion
+  - Cuenta_Contable
+  - Valores_Asociados
+  - Comentario_Conciliacion
+  - ID_Grupo_Conciliacion
+- Dataset de conciliacion con detalle por fila, diferencias y grupo asignado
+
+### Tolerancias
+
+- Fecha: ±1 dia por defecto
+- Valor: configurable desde la UI o el endpoint
+
+### Ejemplo de datos
+
+| Archivo | Fecha | Valor | Resultado |
+| --- | --- | --- | --- |
+| PSE | 2026-04-30 | 1.500.000 | Conciliado 1:N |
+| Cruces contables | 2026-04-29 | 500.000 | Parte del grupo |
+| Cruces contables | 2026-04-30 | 500.000 | Parte del grupo |
+| Cruces contables | 2026-05-01 | 500.000 | Parte del grupo |
+
+Comentario esperado:
+
+- Conciliado con cuenta 12345 por valor total 1.500.000,00 (3 transacciones contables)
+- Conciliación parcial - diferencia de 20.000,00
+- Sin coincidencia en cruces contables
+
 ## Backend: ejecutar local
 
 1. Ir a carpeta backend

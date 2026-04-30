@@ -99,19 +99,20 @@ class ProcesadorIntegrado:
 
             sheet = workbook[sheet_name]
             comment_col, observation_col = annotation_columns.get(sheet_name, (None, None))
+            group_id = str(row.get("id_grupo_conciliacion") or "").strip()
+            group_text = f"[{group_id}]" if group_id else ""
 
             if comment_col is not None:
                 comment_cell = sheet.cell(row=excel_row_int, column=comment_col)
-                comment_text = f"Cruce PSE - {comentario}" if comentario else f"Cruce PSE - {valores}"
+                base_comment = comentario if comentario else valores
+                prefix = f"Cruce PSE {group_text}".strip()
+                comment_text = f"{prefix} - {base_comment}" if base_comment else prefix
                 comment_cell.value = self._append_text_once(comment_cell.value, comment_text)
 
             if observation_col is not None:
                 observation_cell = sheet.cell(row=excel_row_int, column=observation_col)
-                observation_text = (
-                    f"Reclasificacion PSE: {valores}"
-                    if valores
-                    else "Reclasificacion PSE detectada"
-                )
+                base_observation = valores if valores else "Reclasificacion PSE detectada"
+                observation_text = f"{group_text} {base_observation}".strip() if group_text else base_observation
                 observation_cell.value = self._append_text_once(observation_cell.value, observation_text)
 
         output_stream = BytesIO()

@@ -6,7 +6,7 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
 from conciliador import ConciliadorContable
-from pse_conciliador import PseConciliador
+from integrador import ProcesadorIntegrado
 
 
 app = FastAPI(title="Conciliador Contable API", version="1.0.0")
@@ -32,47 +32,52 @@ def health() -> dict[str, str]:
 
 
 @app.post("/procesar")
-async def procesar(file: UploadFile = File(...)) -> dict:
-    if not file.filename or not file.filename.lower().endswith(".xlsx"):
-        raise HTTPException(status_code=400, detail="Solo se permiten archivos .xlsx")
-
-    try:
-        content = await file.read()
-        if not content:
-            raise HTTPException(status_code=400, detail="El archivo esta vacio")
-
-        engine = ConciliadorContable(content)
-        resultado = engine.procesar()
-        return resultado
-    except HTTPException:
-        raise
-    except Exception:
-        raise HTTPException(status_code=500, detail="Error procesando el archivo")
-
-
-@app.post("/pse/conciliar")
-async def conciliar_pse(
-    pse_file: UploadFile = File(...),
-    cruces_file: UploadFile = File(...),
+async def procesar(
+    file: UploadFile | None = File(None),
+    pse_file: UploadFile | None = File(None),
+    cruces_file: UploadFile | None = File(None),
     tolerance_days: int = Form(1),
     tolerance_value: float = Form(0.01),
 ) -> dict:
-    if not pse_file.filename or not pse_file.filename.lower().endswith(".xlsx"):
+    if file is None and pse_file is None and cruces_file is None:
+        raise HTTPException(status_code=400, detail="Debes enviar al menos un archivo para procesar")
+
+    if file is not None and (not file.filename or not file.filename.lower().endswith(".xlsx")):
+        raise HTTPException(status_code=400, detail="Solo se permiten archivos .xlsx")
+    if pse_file is not None and (not pse_file.filename or not pse_file.filename.lower().endswith(".xlsx")):
         raise HTTPException(status_code=400, detail="El archivo PSE debe ser .xlsx")
-    if not cruces_file.filename or not cruces_file.filename.lower().endswith(".xlsx"):
+    if cruces_file is not None and (not cruces_file.filename or not cruces_file.filename.lower().endswith(".xlsx")):
         raise HTTPException(status_code=400, detail="El archivo de cruces contables debe ser .xlsx")
 
     try:
-        pse_content = await pse_file.read()
-        cruces_content = await cruces_file.read()
-        if not pse_content:
-            raise HTTPException(status_code=400, detail="El archivo PSE esta vacio")
-        if not cruces_content:
-            raise HTTPException(status_code=400, detail="El archivo de cruces contables esta vacio")
+        contable_content = None
+        pse_content = None
+        cruces_content = None
 
-        engine = PseConciliador(
-            pse_content,
-            cruces_content,
+        if file is not None:
+            contable_content = await file.read()
+            if not contable_content:
+                raise HTTPException(status_code=400, detail="El archivo esta vacio")
+
+        if pse_file is not None:
+            pse_content = await pse_file.read()
+            if not pse_content:
+                raise HTTPException(status_code=400, detail="El archivo PSE esta vacio")
+
+        if cruces_file is not None:
+            cruces_content = await cruces_file.read()
+            if not cruces_content:
+                raise HTTPException(status_code=400, detail="El archivo de cruces contables esta vacio")
+
+        if pse_content is not None and cruces_content is None:
+            raise HTTPException(status_code=400, detail="Debes enviar el archivo PSE junto con el archivo de cruces contables")
+        if cruces_content is not None and pse_content is None:
+            raise HTTPException(status_code=400, detail="Debes enviar el archivo de cruces contables junto con el archivo PSE")
+
+        engine = ProcesadorIntegrado(
+            contable_bytes=contable_content,
+            pse_bytes=pse_content,
+            cruces_bytes=cruces_content,
             date_tolerance_days=tolerance_days,
             value_tolerance=tolerance_value,
         )
@@ -80,4 +85,4 @@ async def conciliar_pse(
     except HTTPException:
         raise
     except Exception:
-        raise HTTPException(status_code=500, detail="Error conciliando el PSE")
+        raise HTTPException(status_code=500, detail="Error procesando los archivos")

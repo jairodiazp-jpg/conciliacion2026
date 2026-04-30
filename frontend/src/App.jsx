@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import Dashboard from "./components/Dashboard";
+import ProcesoUnificadoSection from "./components/ProcesoUnificadoSection";
 
 const API_BASE = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/$/, "");
 
@@ -821,78 +821,7 @@ function App() {
         </aside>
 
         <section className="main-column">
-          <div className="panel toolbar">
-            <div className="toolbar-title">
-              <span className="section-eyebrow">Centro de control</span>
-              <h2>Dashboard de conciliación</h2>
-              <p>
-                Todo el flujo está organizado para que cargues, proceses y revises resultados en un solo lugar.
-              </p>
-            </div>
-
-            <div className="toolbar-actions">
-              <span className="toolbar-badge">{filename}</span>
-              <button className="btn btn-secondary" onClick={handleDownloadResult} disabled={!result?.file}>
-                Descargar Excel
-              </button>
-              <button className="btn btn-primary" onClick={handleProcess} disabled={loading || !selectedFile}>
-                {loading ? "Procesando..." : "Procesar archivo"}
-              </button>
-              <button className="btn btn-ghost" onClick={handleReset} disabled={loading && !result}>
-                Limpiar pantalla
-              </button>
-            </div>
-          </div>
-
-          <div className="panel panel-pad">
-            <div className="brand-row">
-              <span className="brand-pill">Conciliacion 2026</span>
-              <span style={{ color: "var(--muted)", fontSize: 13 }}>
-                Procesamiento Excel en memoria
-              </span>
-            </div>
-
-            <p className="eyebrow">Interfaz clara y profesional</p>
-            <h2 className="title">Conciliador contable con diseño limpio y lectura rápida</h2>
-            <p className="subtitle">
-              Sube tu archivo, ejecuta la conciliación, descarga el resultado y revisa logs, alertas y resumen
-              desde una interfaz clara, ligera y ordenada.
-            </p>
-
-            <div className="hero-grid">
-              <div className="upload-card">
-                <div className="upload-actions">
-                  <input
-                    className="input-file"
-                    type="file"
-                    accept=".xlsx"
-                    onChange={handleFileChange}
-                    disabled={loading}
-                  />
-                </div>
-                <span className="filename">Archivo seleccionado: {filename}</span>
-
-                {error && <p className="error">{error}</p>}
-              </div>
-
-              <div className="meta-grid">
-                <div className="callout">
-                  <h3>Estado actual</h3>
-                  <p>
-                    {loading
-                      ? "Procesando el archivo y construyendo el Excel conciliado..."
-                      : result
-                        ? "Archivo procesado. Revisa el resumen y los logs para validar resultados."
-                        : "Listo para cargar un archivo y ejecutar la conciliación."}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <section className="dashboard-shell content-grid">
-            <Dashboard data={result} loading={loading} />
-          </section>
+          <ProcesoUnificadoSection apiBase={API_BASE} />
         </section>
       </main>
     </div>

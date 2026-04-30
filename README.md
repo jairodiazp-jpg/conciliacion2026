@@ -35,12 +35,14 @@ Proyecto fullstack stateless para conciliacion contable de archivos Excel (.xlsx
 ## Conciliacion PSE
 
 Se agrego un flujo opcional y desacoplado para conciliar un archivo PSE contra un archivo de cruces contables sin alterar la estructura original del PSE.
+Ahora el backend permite ejecutar en una sola llamada la conciliacion contable existente y la conciliacion PSE/banco cuando se envian los archivos correspondientes juntos.
 
 ### Salida
 
 - Archivos conciliados:
   - PSE_CONCILIADO.xlsx
   - CRUCES_CONCILIADOS.xlsx
+- Si tambien se envía el archivo contable tradicional, la respuesta incluye CONCILIACION_CONTABLE.xlsx en la misma corrida.
 - Columnas nuevas al final en ambos archivos:
   - Estado_Conciliacion
   - Cuenta_Contable

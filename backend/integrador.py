@@ -292,8 +292,27 @@ class ProcesadorIntegrado:
                         contable_result["file"],
                         value_tolerance=self.value_tolerance,
                     )
-                    contable_result["file"] = procesador_adq.procesar()
+                    adq_result = procesador_adq.procesar()
+                    contable_result["file"] = adq_result["contable_file"]
                     logs.extend(procesador_adq.logs)
+                    contable_result_with_adq = {
+                        "mode": "contable-only",
+                        "contable": contable_result,
+                        "files": [
+                            {
+                                "name": "CONCILIACION_CONTABLE.xlsx",
+                                "file": adq_result["contable_file"],
+                            },
+                            {
+                                "name": "ADQUIRENCIAS_PROCESADAS.xlsx",
+                                "file": adq_result["adquirencias_file"],
+                            },
+                        ],
+                        "logs": logs,
+                        "alertas": alertas,
+                        "resumen": contable_result.get("resumen", {}),
+                    }
+                    return contable_result_with_adq
                 except Exception as e:
                     alertas.append(f"Fallo en procesamiento de Adquirencias: {e}")
             return contable_result
@@ -337,6 +356,7 @@ class ProcesadorIntegrado:
             alertas.append(f"Fallo en agrupación PSE: {e}")
 
         # Fase adicional: Procesar Adquirencias si se proporciona
+        adquirencias_file_b64 = None
         if self.adquirencias_bytes is not None:
             try:
                 procesador_adq = ProcesadorAdquirencias(
@@ -344,7 +364,9 @@ class ProcesadorIntegrado:
                     contable_result["file"],
                     value_tolerance=self.value_tolerance,
                 )
-                contable_result["file"] = procesador_adq.procesar()
+                adq_result = procesador_adq.procesar()
+                contable_result["file"] = adq_result["contable_file"]
+                adquirencias_file_b64 = adq_result["adquirencias_file"]
                 logs.extend(procesador_adq.logs)
             except Exception as e:
                 alertas.append(f"Fallo en procesamiento de Adquirencias: {e}")
@@ -359,6 +381,11 @@ class ProcesadorIntegrado:
                 "file": pse_result["file"],
             },
         ]
+        if adquirencias_file_b64 is not None:
+            files.append({
+                "name": "ADQUIRENCIAS_PROCESADAS.xlsx",
+                "file": adquirencias_file_b64,
+            })
         resumen = {
             "cruzados": int(contable_result.get("resumen", {}).get("cruzados", 0)) + int(pse_result.get("resumen", {}).get("cruzados", 0)),
             "posibles": int(contable_result.get("resumen", {}).get("posibles", 0)) + int(pse_result.get("resumen", {}).get("posibles", 0)),

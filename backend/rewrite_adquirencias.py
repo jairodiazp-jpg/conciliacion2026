@@ -1,4 +1,7 @@
-"""Procesador de Adquirencias: cruza valores, fechas y códigos con Bancolombia 690."""
+"""Rewrite procesador_adquirencias.py with correct implementation."""
+from pathlib import Path
+
+content = '''"""Procesador de Adquirencias: cruza valores, fechas y códigos con Bancolombia 690."""
 
 from __future__ import annotations
 
@@ -320,3 +323,7 @@ class ProcesadorAdquirencias:
                 observation_cell.value = f"{current} | {observation_text}"
             elif not current:
                 observation_cell.value = observation_text
+'''
+
+Path("procesador_adquirencias.py").write_text(content, encoding="utf-8")
+print("OK")

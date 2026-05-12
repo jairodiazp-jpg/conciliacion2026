@@ -282,6 +282,47 @@ class ProcesadorIntegrado:
             logs.extend(pse_result.get("logs", []))
             alertas.extend(pse_result.get("alertas", []))
         if contable_result is None and pse_result is None:
+            # Permitir si se proporciona Adquirencias + Cruces
+            if self.adquirencias_bytes is not None and self.cruces_bytes is not None:
+                # Procesar Adquirencias cruzando con Cruces Contables
+                try:
+                    cruces_b64 = base64.b64encode(self.cruces_bytes).decode("utf-8")
+                    procesador_adq = ProcesadorAdquirencias(
+                        self.adquirencias_bytes,
+                        cruces_b64,
+                        value_tolerance=self.value_tolerance,
+                        date_tolerance_days=self.date_tolerance_days,
+                    )
+                    adq_result = procesador_adq.procesar()
+                    logs.extend(procesador_adq.logs)
+                    
+                    return {
+                        "mode": "adquirencias-cruces",
+                        "files": [
+                            {
+                                "name": "CRUCES_CONTABLES.xlsx",
+                                "file": adq_result["contable_file"],
+                            },
+                            {
+                                "name": "ADQUIRENCIAS_PROCESADAS.xlsx",
+                                "file": adq_result["adquirencias_file"],
+                            },
+                        ],
+                        "logs": logs,
+                        "alertas": alertas,
+                        "resumen": {
+                            "cruzados": len([l for l in logs if l.get("tipo") == "adquirencia_cruzada"]),
+                        },
+                    }
+                except Exception as e:
+                    alertas.append(f"Fallo en procesamiento de Adquirencias: {e}")
+                    return {
+                        "mode": "error",
+                        "files": [],
+                        "logs": logs,
+                        "alertas": alertas,
+                        "resumen": {},
+                    }
             raise ValueError("No se recibieron archivos para procesar")
         if contable_result is not None and pse_result is None:
             # Procesar Adquirencias si se proporciona (contable solo)

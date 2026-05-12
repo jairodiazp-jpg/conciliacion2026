@@ -168,6 +168,27 @@ class ConciliadorContable:
             return f"Cruce de cuenta {source_account} a cuenta {target_accounts[0]}"
         return f"Cruce de cuenta {source_account} a cuentas {', '.join(target_accounts)}"
 
+    def _resolve_annotation_tag(self, entry: LedgerEntry, tag: str | None) -> str | None:
+        if tag:
+            return tag
+
+        # Reutiliza la etiqueta ya asignada por _tag_and_color (columna contigua al valor)
+        # para mantener numeración y consistencia en comentario/observación.
+        sheet = self.workbook[entry.sheet_name]
+        raw_tag = sheet.cell(row=entry.row, column=entry.value_col + 1).value
+        if raw_tag is None:
+            return None
+
+        raw_text = str(raw_tag).strip()
+        if not raw_text:
+            return None
+
+        match = re.search(r"(Posible Cruce \d+|Cruzado Aprob \d+|Cruzado \d+)", raw_text, re.IGNORECASE)
+        if match:
+            return match.group(1)
+
+        return raw_text
+
     def _annotate_entry(self, entry: LedgerEntry, other: LedgerEntry | str, tag: str | None = None) -> None:
         """Anota una fila con comentario y observacion.
 
@@ -189,26 +210,14 @@ class ConciliadorContable:
         # Texto base para cuentas / reclasificacion
         base_text = self._comment_account_text(entry.sheet_name, other_sheet_name)
 
-        # Si no se pasó tag, intentar asignar numeración consistente automáticamente
-        # Detecta si es un posible cruce o un cruce y asigna el siguiente id correspondiente.
-        if tag is None:
-            lower_base = base_text.lower()
-            if "posible" in lower_base or "posible cruce" in lower_base:
-                tag = f"Posible Cruce {self.possible_id}"
-                self.possible_id += 1
-            elif "cruce" in lower_base or "cruzado" in lower_base or "cruce" in base_text:
-                tag = f"Cruzado {self.cross_id}"
-                self.cross_id += 1
-            else:
-                # fallback sin numeración específica
-                tag = None
+        tag = self._resolve_annotation_tag(entry, tag)
 
         if comment_col is not None:
             comment_cell = sheet.cell(row=entry.row, column=comment_col)
             if tag:
                 comment_text = f"{tag} - {base_text}"
             else:
-                comment_text = f"Posible Cruce - {base_text}"
+                comment_text = f"Cruce - {base_text}"
             comment_cell.value = self._append_text_once(comment_cell.value, comment_text)
 
         if observation_col is not None:

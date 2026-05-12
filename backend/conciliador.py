@@ -167,32 +167,59 @@ class ConciliadorContable:
             return f"Cruce de cuenta {source_account} a cuenta {target_accounts[0]}"
         return f"Cruce de cuenta {source_account} a cuentas {', '.join(target_accounts)}"
 
-    def _annotate_entry(self, entry: LedgerEntry, other_sheet_name: str) -> None:
+    def _annotate_entry(self, entry: LedgerEntry, other: LedgerEntry | str, tag: str | None = None) -> None:
+        """Anota una fila con comentario y observacion.
+
+        - `other` puede ser otro LedgerEntry (mejor) o el nombre de la hoja destino.
+        - `tag` si se proporciona (ej. 'Posible Cruce 1' o 'Cruzado 2') se incluye en el comentario
+          y se asegura que el homolog reciba la misma enumeración y una traza "Encontrado en ...".
+        """
         sheet = self.workbook[entry.sheet_name]
         comment_col, observation_col = self.annotation_columns.get(entry.sheet_name, (None, None))
 
+        # Resolver información del otro extremo para traza
+        if isinstance(other, LedgerEntry):
+            other_sheet_name = other.sheet_name
+            other_location = f"{other.sheet_name}:fila {other.row}"
+        else:
+            other_sheet_name = str(other)
+            other_location = other_sheet_name
+
+        # Texto base para cuentas / reclasificacion
+        base_text = self._comment_account_text(entry.sheet_name, other_sheet_name)
+
         if comment_col is not None:
             comment_cell = sheet.cell(row=entry.row, column=comment_col)
-            # Corregir y especificar texto de comentario
-            comment_text = f"Posible Cruce - {self._comment_account_text(entry.sheet_name, other_sheet_name)}"
+            if tag:
+                comment_text = f"{tag} - {base_text}"
+            else:
+                comment_text = f"Posible Cruce - {base_text}"
             comment_cell.value = self._append_text_once(comment_cell.value, comment_text)
 
         if observation_col is not None:
             observation_cell = sheet.cell(row=entry.row, column=observation_col)
-            # Escribir observación más informativa indicando cuenta origen -> destino
-            observation_text = f"Reclasificación: {self._comment_account_text(entry.sheet_name, other_sheet_name)}"
+            # Incluir trazabilidad explícita indicando dónde se encontró el homolog
+            if tag:
+                observation_text = f"{tag} encontrado en {other_location}. {base_text}"
+            else:
+                observation_text = f"Encontrado en {other_location}. Reclasificación: {base_text}"
             observation_cell.value = self._append_text_once(observation_cell.value, observation_text)
 
-    def _annotate_pair(self, left: LedgerEntry, right: LedgerEntry) -> None:
-        self._annotate_entry(left, right.sheet_name)
-        self._annotate_entry(right, left.sheet_name)
+    def _annotate_pair(self, left: LedgerEntry, right: LedgerEntry, tag: str | None = None) -> None:
+        # Anotación recíproca consistente; pasa el objeto para traza completa
+        self._annotate_entry(left, right, tag)
+        self._annotate_entry(right, left, tag)
 
-    def _annotate_group(self, primary: LedgerEntry, related_entries: list[LedgerEntry]) -> None:
+    def _annotate_group(self, primary: LedgerEntry, related_entries: list[LedgerEntry], tag: str | None = None) -> None:
         related_sheets = sorted({entry.sheet_name for entry in related_entries})
         relation_target = ", ".join(related_sheets) if related_sheets else primary.sheet_name
-        self._annotate_entry(primary, relation_target)
+        # Anotar el primario indicando los relacionados
+        if tag:
+            self._annotate_entry(primary, relation_target, tag)
+        else:
+            self._annotate_entry(primary, relation_target)
         for entry in related_entries:
-            self._annotate_entry(entry, primary.sheet_name)
+            self._annotate_entry(entry, primary, tag)
 
     def _parse_date(self, value: Any) -> date | None:
         if isinstance(value, datetime):
@@ -400,7 +427,7 @@ class ConciliadorContable:
             best_lower.matched = True
             self._tag_and_color(upper, ORANGE_FILL, tag)
             self._tag_and_color(best_lower, ORANGE_FILL, tag)
-            self._annotate_pair(upper, best_lower)
+            self._annotate_pair(upper, best_lower, tag)
 
             gap_text = self._date_gap_days(upper.raw_date, best_lower.raw_date)
             gap_detail = f" y fecha gap {gap_text} dias" if gap_text is not None else ""
@@ -448,7 +475,7 @@ class ConciliadorContable:
             best_candidate.matched = True
             self._tag_and_color(upper, GREEN_FILL, tag)
             self._tag_and_color(best_candidate, GREEN_FILL, tag)
-            self._annotate_pair(upper, best_candidate)
+            self._annotate_pair(upper, best_candidate, tag)
             self._append_log(
                 tipo="valor_fecha",
                 valor=upper.value,
@@ -514,7 +541,7 @@ class ConciliadorContable:
             for item in combo:
                 item.matched = True
                 self._tag_and_color(item, GREEN_FILL, tag)
-            self._annotate_group(upper, combo)
+            self._annotate_group(upper, combo, tag)
 
             self._append_log(
                 tipo="valor_fecha",
@@ -541,7 +568,7 @@ class ConciliadorContable:
             for item in combo:
                 item.matched = True
                 self._tag_and_color(item, GREEN_FILL, tag)
-            self._annotate_group(lower, combo)
+            self._annotate_group(lower, combo, tag)
 
             self._append_log(
                 tipo="valor_fecha",
@@ -588,7 +615,7 @@ class ConciliadorContable:
             candidate.matched = True
             self._tag_and_color(upper, YELLOW_FILL, tag)
             self._tag_and_color(candidate, YELLOW_FILL, tag)
-            self._annotate_pair(upper, candidate)
+            self._annotate_pair(upper, candidate, tag)
 
             self._append_log(
                 tipo="posible",

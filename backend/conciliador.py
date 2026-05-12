@@ -189,6 +189,20 @@ class ConciliadorContable:
         # Texto base para cuentas / reclasificacion
         base_text = self._comment_account_text(entry.sheet_name, other_sheet_name)
 
+        # Si no se pasó tag, intentar asignar numeración consistente automáticamente
+        # Detecta si es un posible cruce o un cruce y asigna el siguiente id correspondiente.
+        if tag is None:
+            lower_base = base_text.lower()
+            if "posible" in lower_base or "posible cruce" in lower_base:
+                tag = f"Posible Cruce {self.possible_id}"
+                self.possible_id += 1
+            elif "cruce" in lower_base or "cruzado" in lower_base or "cruce" in base_text:
+                tag = f"Cruzado {self.cross_id}"
+                self.cross_id += 1
+            else:
+                # fallback sin numeración específica
+                tag = None
+
         if comment_col is not None:
             comment_cell = sheet.cell(row=entry.row, column=comment_col)
             if tag:

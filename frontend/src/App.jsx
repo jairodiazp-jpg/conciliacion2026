@@ -805,10 +805,6 @@ function App() {
 
           <nav className="nav-list" aria-label="Navegación principal">
             <div className="nav-item active"><span className="nav-dot" />Dashboard</div>
-            <div className="nav-item"><span className="nav-dot" />Cargar archivos</div>
-            <div className="nav-item"><span className="nav-dot" />Motor de cruce</div>
-            <div className="nav-item"><span className="nav-dot" />Informes</div>
-            <div className="nav-item"><span className="nav-dot" />Configuración</div>
           </nav>
 
           <div className="sidebar-card">

@@ -242,22 +242,35 @@ class ProcesadorAdquirencias:
         if start_row is None:
             start_row = 2
 
+        # Para 690, usar estructura estándar de Bancolombia:
+        # Columna B (idx 1): Fecha
+        # Columna D (idx 3): Valor de consignación
+        # Columna F (idx 5): Código de aprobación
+        # No hacer detección automática, usar posiciones fijas.
+        
+        valor_col = 4  # Columna D
+        fecha_col = 2  # Columna B
+        
         entries: list[dict[str, Any]] = []
         for row in sheet.iter_rows(min_row=start_row, max_row=sheet.max_row):
             try:
-                value_candidates = self._parse_value_candidates(list(row), exclude_cols={6})
-                if not value_candidates:
-                    continue
-                value_col, value, value_cell = max(value_candidates, key=lambda item: abs(item[1]))
-                if abs(value) < 0.0001:
-                    continue
-
-                raw_date = self._parse_date_from_row(row)
+                # Leer columna B (índice 1) para fecha
+                fecha_cell = row[1] if len(row) > 1 else None
+                raw_date = self._parse_date(fecha_cell.value) if fecha_cell else None
                 if raw_date is None:
                     continue
-
+                
+                # Leer columna D (índice 3) para valor
+                valor_cell = row[3] if len(row) > 3 else None
+                if valor_cell is None:
+                    continue
+                value = self._parse_amount(valor_cell.value)
+                if value is None or abs(value) < 0.0001:
+                    continue
+                
+                # Leer código de aprobación SIEMPRE de columna F (índice 5)
                 approval = ""
-                if len(row) >= 6:
+                if len(row) > 5:
                     approval = self._normalizar_autorizacion(row[5].value)
                 if not approval:
                     approval = self._extraer_aprobacion_en_fila(row)
@@ -271,8 +284,8 @@ class ProcesadorAdquirencias:
                         "valor": float(value),
                         "fecha": raw_date,
                         "autorizacion": approval,
-                        "valor_cell": value_cell,
-                        "valor_col": value_col,
+                        "valor_cell": valor_cell,
+                        "valor_col": valor_col,
                     }
                 )
             except Exception:
@@ -284,6 +297,7 @@ class ProcesadorAdquirencias:
         self,
         sheet: Worksheet,
         *,
+        start_row: int = 1,
         need_auth: bool = True,
     ) -> tuple[int | None, int | None, int | None, int]:
         valor_col: int | None = None
@@ -308,8 +322,8 @@ class ProcesadorAdquirencias:
                     score = max(score, 500 - index)
             return score
 
-        max_scan = min(sheet.max_row, 30)
-        for row_idx in range(1, max_scan + 1):
+        max_scan = min(sheet.max_row, start_row + 29)
+        for row_idx in range(start_row, max_scan + 1):
             row = sheet[row_idx]
             for cell in row:
                 if not isinstance(cell.value, str):
@@ -353,6 +367,16 @@ class ProcesadorAdquirencias:
                 break
 
         return valor_col, fecha_col, auth_col, header_row
+
+    def _find_header_columns_from_row(
+        self,
+        sheet: Worksheet,
+        *,
+        start_row: int = 1,
+        need_auth: bool = True,
+    ) -> tuple[int | None, int | None, int | None, int]:
+        """Alias para _find_header_columns con start_row especificado."""
+        return self._find_header_columns(sheet, start_row=start_row, need_auth=need_auth)
 
     def _extraer_adquirencias_con_fila(self) -> list[dict[str, Any]]:
         """Extrae datos de Adquirencias con referencias a celdas."""

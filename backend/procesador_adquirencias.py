@@ -31,6 +31,8 @@ class ProcesadorAdquirencias:
         self.date_tolerance_days = max(0, int(date_tolerance_days))
         self.logs: list[dict[str, Any]] = []
         self.adquirencia_counter = 1
+        self._ensure_annotation_columns(self.adquirencias_workbook)
+        self._ensure_annotation_columns(self.contable_workbook)
         self.annotation_columns_adq = self._index_annotation_columns(self.adquirencias_workbook)
         self.annotation_columns_cont = self._index_annotation_columns(self.contable_workbook)
 
@@ -76,6 +78,28 @@ class ProcesadorAdquirencias:
                     break
             indexed[sheet.title] = (comment_col, observation_col)
         return indexed
+
+    def _ensure_annotation_columns(self, workbook) -> None:
+        for sheet in workbook.worksheets:
+            headers = {
+                self._normalizar_texto(str(cell.value)): cell.column
+                for cell in sheet[1]
+                if cell.value is not None
+            }
+
+            if "coment" not in " ".join(headers.keys()):
+                next_col = sheet.max_column + 1
+                sheet.cell(row=1, column=next_col).value = "Comentario"
+
+            headers = {
+                self._normalizar_texto(str(cell.value)): cell.column
+                for cell in sheet[1]
+                if cell.value is not None
+            }
+
+            if "observ" not in " ".join(headers.keys()):
+                next_col = sheet.max_column + 1
+                sheet.cell(row=1, column=next_col).value = "Observacion"
 
     def _parse_date(self, value: Any) -> date | None:
         if isinstance(value, datetime):
@@ -137,10 +161,17 @@ class ProcesadorAdquirencias:
         if not tokens:
             return ""
 
-        # Priorizamos tokens con digitos (caso real de numeros/codigos de aprobacion).
+        def token_score(token: str) -> tuple[int, int, int]:
+            digits = sum(ch.isdigit() for ch in token)
+            has_digits = 1 if digits > 0 else 0
+            # Los codigos de aprobacion suelen ser compactos; penaliza cuentas largas.
+            compact_bonus = 1 if 4 <= len(token) <= 8 else 0
+            long_penalty = -1 if len(token) > 10 and digits == len(token) else 0
+            return (has_digits + compact_bonus + long_penalty, digits, -len(token))
+
         tokens_with_digits = [token for token in tokens if any(ch.isdigit() for ch in token)]
         ranked = tokens_with_digits if tokens_with_digits else tokens
-        ranked.sort(key=lambda token: (sum(ch.isdigit() for ch in token), len(token)), reverse=True)
+        ranked.sort(key=token_score, reverse=True)
         return ranked[0]
 
     def _extraer_aprobacion_en_fila(self, row, preferred_col: int | None = None) -> str:
@@ -158,8 +189,96 @@ class ProcesadorAdquirencias:
         if not candidates:
             return ""
 
-        candidates.sort(key=lambda token: (sum(ch.isdigit() for ch in token), len(token)), reverse=True)
+        candidates.sort(key=lambda token: (sum(ch.isdigit() for ch in token), 1 if 4 <= len(token) <= 8 else 0, -len(token)), reverse=True)
         return candidates[0]
+
+    def _parse_date_from_row(self, row) -> date | None:
+        for cell in row:
+            parsed = self._parse_date(cell.value)
+            if parsed is not None:
+                return parsed
+        return None
+
+    def _parse_value_candidates(self, row, exclude_cols: set[int] | None = None) -> list[tuple[int, float, Any]]:
+        candidates: list[tuple[int, float, Any]] = []
+        excluded = exclude_cols or set()
+        for idx, cell in enumerate(row, start=1):
+            if idx in excluded:
+                continue
+            value = cell.value
+            if value is None or isinstance(value, bool):
+                continue
+            if getattr(cell, "is_date", False):
+                continue
+            parsed = self._parse_amount(value)
+            if parsed is None or abs(parsed) < 0.0001:
+                continue
+            candidates.append((idx, float(parsed), cell))
+        return candidates
+
+    def _extraer_movimientos_690(self) -> tuple[Worksheet | None, list[dict[str, Any]]]:
+        sheet = None
+        for candidate in self.contable_workbook.worksheets:
+            title = self._normalizar_texto(candidate.title)
+            if "690" in title or "1331" in title or "bancolombia" in title:
+                sheet = candidate
+                break
+
+        if sheet is None:
+            return None, []
+
+        marker_candidates = [
+            "consignaciones sin registrar",
+            "sin registrar en el extracto",
+            "sin registrar en libros",
+        ]
+        start_row = None
+        for row in sheet.iter_rows(min_row=1, max_row=sheet.max_row):
+            texts = [self._normalizar_texto(str(cell.value)) for cell in row if isinstance(cell.value, str) and str(cell.value).strip()]
+            if any(any(marker in text for marker in marker_candidates) for text in texts):
+                start_row = row[0].row + 1
+                break
+
+        if start_row is None:
+            start_row = 2
+
+        entries: list[dict[str, Any]] = []
+        for row in sheet.iter_rows(min_row=start_row, max_row=sheet.max_row):
+            try:
+                value_candidates = self._parse_value_candidates(list(row), exclude_cols={6})
+                if not value_candidates:
+                    continue
+                value_col, value, value_cell = max(value_candidates, key=lambda item: abs(item[1]))
+                if abs(value) < 0.0001:
+                    continue
+
+                raw_date = self._parse_date_from_row(row)
+                if raw_date is None:
+                    continue
+
+                approval = ""
+                if len(row) >= 6:
+                    approval = self._extraer_token_aprobacion(row[5].value)
+                if not approval:
+                    approval = self._extraer_aprobacion_en_fila(row)
+                if not approval:
+                    continue
+
+                entries.append(
+                    {
+                        "sheet": sheet.title,
+                        "row": row[0].row,
+                        "valor": float(value),
+                        "fecha": raw_date,
+                        "autorizacion": approval,
+                        "valor_cell": value_cell,
+                        "valor_col": value_col,
+                    }
+                )
+            except Exception:
+                continue
+
+        return sheet, entries
 
     def _find_header_columns(
         self,
@@ -282,33 +401,9 @@ class ProcesadorAdquirencias:
 
     def _cruzar_ambos_archivos(self, adquirencias_data: list[dict[str, Any]]) -> None:
         """Busca coincidencias por número de aprobación y valida fecha+valor exactos."""
-        bancolombia_sheet = None
-        for sheet in self.contable_workbook.worksheets:
-            if "1331" in sheet.title or "690" in sheet.title:
-                bancolombia_sheet = sheet
-                break
-        
+        bancolombia_sheet, bancolombia_entries = self._extraer_movimientos_690()
+
         if bancolombia_sheet is None:
-            return
-        
-        start_row = None
-        marker_text = "consignaciones sin registrar"
-        for row in bancolombia_sheet.iter_rows(min_row=1, max_row=bancolombia_sheet.max_row):
-            for cell in row:
-                if isinstance(cell.value, str) and marker_text in self._normalizar_texto(cell.value):
-                    start_row = cell.row + 1
-                    break
-            if start_row:
-                break
-        
-        if start_row is None:
-            start_row = 2
-        
-        valor_col_banco, fecha_col_banco, auth_col_banco, _ = self._find_header_columns(
-            bancolombia_sheet,
-            need_auth=False,
-        )
-        if valor_col_banco is None or fecha_col_banco is None:
             return
         
         adq_by_auth: dict[str, list[dict]] = {}
@@ -316,27 +411,12 @@ class ProcesadorAdquirencias:
             adq_by_auth.setdefault(adq["autorizacion"], []).append(adq)
         
         matched_adq_rows: set[tuple[str, int]] = set()
-        for bancolombia_row in bancolombia_sheet.iter_rows(min_row=start_row, max_row=bancolombia_sheet.max_row):
+        for bank_entry in bancolombia_entries:
             try:
-                valor_cell_banco = bancolombia_row[valor_col_banco - 1] if valor_col_banco - 1 < len(bancolombia_row) else None
-                if valor_cell_banco is None:
-                    continue
-                
-                banco_valor = self._parse_amount(valor_cell_banco.value)
-                if banco_valor is None:
-                    continue
-                
-                if abs(banco_valor) < 0.0001:
-                    continue
-                
-                banco_fecha = None
-                if fecha_col_banco is not None:
-                    fecha_cell_banco = bancolombia_row[fecha_col_banco - 1] if fecha_col_banco - 1 < len(bancolombia_row) else None
-                    if fecha_cell_banco is not None:
-                        banco_fecha = self._parse_date(fecha_cell_banco.value)
-                
-                banco_auth = self._extraer_aprobacion_en_fila(bancolombia_row, preferred_col=auth_col_banco)
-                
+                banco_valor = bank_entry["valor"]
+                banco_fecha = bank_entry["fecha"]
+                banco_auth = bank_entry["autorizacion"]
+
                 if banco_fecha is None or not banco_auth:
                     continue
                 
@@ -349,7 +429,8 @@ class ProcesadorAdquirencias:
                     adq_row_key = (candidate["sheet"], candidate["row"])
                     if adq_row_key in matched_adq_rows:
                         continue
-                    if candidate["fecha"] != banco_fecha:
+                    day_delta = abs((candidate["fecha"] - banco_fecha).days)
+                    if day_delta > self.date_tolerance_days:
                         continue
                     value_delta = abs(round(abs(candidate["valor"]), 2) - round(abs(banco_valor), 2))
                     if value_delta > self.value_tolerance:
@@ -365,12 +446,12 @@ class ProcesadorAdquirencias:
                 tag = f"Adquirencia {self.adquirencia_counter}"
                 self.adquirencia_counter += 1
                 
-                valor_cell_banco.fill = LIGHT_BLUE_FILL
+                bank_entry["valor_cell"].fill = LIGHT_BLUE_FILL
                 adq["valor_cell"].fill = LIGHT_BLUE_FILL
                 
                 self._anotar_cruce(
                     bancolombia_sheet,
-                    bancolombia_row[0].row,
+                    bank_entry["row"],
                     tag,
                     self.annotation_columns_cont,
                     f"Encontrado en {adq['sheet']}:fila {adq['row']}"
@@ -382,7 +463,7 @@ class ProcesadorAdquirencias:
                     adq["row"],
                     tag,
                     self.annotation_columns_adq,
-                    f"Encontrado en {bancolombia_sheet.title}:fila {bancolombia_row[0].row}"
+                    f"Encontrado en {bancolombia_sheet.title}:fila {bank_entry['row']}"
                 )
                 
                 self.logs.append({
@@ -393,7 +474,7 @@ class ProcesadorAdquirencias:
                     "detalle": (
                         f"{tag}: coincidencia por aprobacion {banco_auth}, "
                         f"valor {banco_valor:,.2f} y fecha {banco_fecha.isoformat()} "
-                        f"en {bancolombia_sheet.title}:fila {bancolombia_row[0].row}"
+                        f"en {bancolombia_sheet.title}:fila {bank_entry['row']}"
                     ),
                 })
                 

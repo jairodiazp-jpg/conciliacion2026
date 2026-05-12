@@ -36,7 +36,7 @@ function SummaryCards({ resumen, loading }) {
       <Card 
         title="Precisión estimada" 
         value={loading ? "..." : precision} 
-        tone="#10b981"
+        tone="#21c4c4"
       />
     </div>
   );

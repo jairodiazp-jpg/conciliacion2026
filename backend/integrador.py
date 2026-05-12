@@ -12,6 +12,7 @@ from openpyxl import load_workbook
 from openpyxl.utils.datetime import from_excel
 from pse_conciliador import PseConciliador
 from agrupacion_pse import conciliacion_por_agrupacion
+from procesador_adquirencias import ProcesadorAdquirencias
 from validacion_temporal import ValidacionTemporalConfig, evaluar_temporal
 
 
@@ -28,6 +29,7 @@ class ProcesadorIntegrado:
         contable_bytes: bytes | None = None,
         pse_bytes: bytes | None = None,
         cruces_bytes: bytes | None = None,
+        adquirencias_bytes: bytes | None = None,
         date_tolerance_days: int = 1,
         value_tolerance: float = 0.01,
         temporal_config: ValidacionTemporalConfig | None = None,
@@ -35,6 +37,7 @@ class ProcesadorIntegrado:
         self.contable_bytes = contable_bytes
         self.pse_bytes = pse_bytes
         self.cruces_bytes = cruces_bytes
+        self.adquirencias_bytes = adquirencias_bytes
         self.date_tolerance_days = date_tolerance_days
         self.value_tolerance = value_tolerance
         self.temporal_config = temporal_config or ValidacionTemporalConfig()
@@ -281,6 +284,18 @@ class ProcesadorIntegrado:
         if contable_result is None and pse_result is None:
             raise ValueError("No se recibieron archivos para procesar")
         if contable_result is not None and pse_result is None:
+            # Procesar Adquirencias si se proporciona (contable solo)
+            if self.adquirencias_bytes is not None:
+                try:
+                    procesador_adq = ProcesadorAdquirencias(
+                        self.adquirencias_bytes,
+                        contable_result["file"],
+                        value_tolerance=self.value_tolerance,
+                    )
+                    contable_result["file"] = procesador_adq.procesar()
+                    logs.extend(procesador_adq.logs)
+                except Exception as e:
+                    alertas.append(f"Fallo en procesamiento de Adquirencias: {e}")
             return contable_result
         if contable_result is None and pse_result is not None:
             cruces_b64 = pse_result.get("secondary_file")
@@ -320,6 +335,19 @@ class ProcesadorIntegrado:
             )
         except Exception as e:
             alertas.append(f"Fallo en agrupación PSE: {e}")
+
+        # Fase adicional: Procesar Adquirencias si se proporciona
+        if self.adquirencias_bytes is not None:
+            try:
+                procesador_adq = ProcesadorAdquirencias(
+                    self.adquirencias_bytes,
+                    contable_result["file"],
+                    value_tolerance=self.value_tolerance,
+                )
+                contable_result["file"] = procesador_adq.procesar()
+                logs.extend(procesador_adq.logs)
+            except Exception as e:
+                alertas.append(f"Fallo en procesamiento de Adquirencias: {e}")
 
         files: list[dict[str, str]] = [
             {

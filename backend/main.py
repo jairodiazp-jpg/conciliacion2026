@@ -37,6 +37,7 @@ async def procesar(
     file: UploadFile | None = File(None),
     pse_file: UploadFile | None = File(None),
     cruces_file: UploadFile | None = File(None),
+    adquirencias_file: UploadFile | None = File(None),
     tolerance_days: int = Form(1),
     tolerance_value: float = Form(0.01),
     temporal_tolerance_days: int = Form(0),
@@ -52,11 +53,14 @@ async def procesar(
         raise HTTPException(status_code=400, detail="El archivo PSE debe ser .xlsx")
     if cruces_file is not None and (not cruces_file.filename or not cruces_file.filename.lower().endswith(".xlsx")):
         raise HTTPException(status_code=400, detail="El archivo de cruces contables debe ser .xlsx")
+    if adquirencias_file is not None and (not adquirencias_file.filename or not adquirencias_file.filename.lower().endswith(".xlsx")):
+        raise HTTPException(status_code=400, detail="El archivo de Adquirencias debe ser .xlsx")
 
     try:
         contable_content = None
         pse_content = None
         cruces_content = None
+        adquirencias_content = None
 
         if file is not None:
             contable_content = await file.read()
@@ -73,6 +77,11 @@ async def procesar(
             if not cruces_content:
                 raise HTTPException(status_code=400, detail="El archivo de cruces contables esta vacio")
 
+        if adquirencias_file is not None:
+            adquirencias_content = await adquirencias_file.read()
+            if not adquirencias_content:
+                raise HTTPException(status_code=400, detail="El archivo de Adquirencias esta vacio")
+
         if pse_content is not None and cruces_content is None:
             raise HTTPException(status_code=400, detail="Debes enviar el archivo PSE junto con el archivo de cruces contables")
         if cruces_content is not None and pse_content is None:
@@ -82,6 +91,7 @@ async def procesar(
             contable_bytes=contable_content,
             pse_bytes=pse_content,
             cruces_bytes=cruces_content,
+            adquirencias_bytes=adquirencias_content,
             date_tolerance_days=tolerance_days,
             value_tolerance=tolerance_value,
             temporal_config=ValidacionTemporalConfig(

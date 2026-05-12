@@ -28,6 +28,7 @@ function downloadBase64(fileContent, name) {
 function ProcesoUnificadoSection({ apiBase }) {
   const [pseFile, setPseFile] = useState(null);
   const [memoFile, setMemoFile] = useState(null);
+  const [adquirenciasFile, setAdquirenciasFile] = useState(null);
   const [dateTolerance, setDateTolerance] = useState(1);
   const [valueTolerance, setValueTolerance] = useState(0.01);
   const [loading, setLoading] = useState(false);
@@ -53,8 +54,8 @@ function ProcesoUnificadoSection({ apiBase }) {
   };
 
   const handleProcess = async () => {
-    if (!pseFile || !memoFile) {
-      setError("Selecciona el archivo PSE y el archivo de conciliación contable.");
+    if (!memoFile) {
+      setError("Selecciona al menos el archivo de conciliación contable.");
       return;
     }
 
@@ -65,6 +66,9 @@ function ProcesoUnificadoSection({ apiBase }) {
       const formData = new FormData();
       if (pseFile) {
         formData.append("pse_file", pseFile);
+      }
+      if (adquirenciasFile) {
+        formData.append("adquirencias_file", adquirenciasFile);
       }
       if (memoFile) {
         formData.append("file", memoFile);
@@ -96,6 +100,7 @@ function ProcesoUnificadoSection({ apiBase }) {
   const handleReset = () => {
     setPseFile(null);
     setMemoFile(null);
+    setAdquirenciasFile(null);
     setError("");
     setResult(null);
   };
@@ -149,8 +154,19 @@ function ProcesoUnificadoSection({ apiBase }) {
           <span style={{ color: "var(--muted)", fontSize: 12, lineHeight: 1.4 }}>
             Sube aquí el archivo de conciliación contable o memorando de cruces.
           </span>
-        </div>
-      </div>
+        </div>        <div style={{ display: "grid", gap: 8 }}>
+          <input
+            className="input-file"
+            type="file"
+            accept=".xlsx"
+            aria-label="Archivo de Adquirencias"
+            onChange={(event) => setAdquirenciasFile(event.target.files?.[0] || null)}
+            disabled={loading}
+          />
+          <span style={{ color: "var(--muted)", fontSize: 12, lineHeight: 1.4 }}>
+            Sube aquí el archivo de Adquirencias (opcional).
+          </span>
+        </div>      </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
         <input

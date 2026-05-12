@@ -14,6 +14,14 @@ from openpyxl.styles import PatternFill
 from openpyxl.utils.datetime import from_excel
 from openpyxl.worksheet.worksheet import Worksheet
 
+from validacion_temporal import (
+    RangoFechas,
+    ValidacionTemporalConfig,
+    calcular_rango_fechas,
+    evaluar_temporal,
+    inferir_periodo_principal,
+)
+
 
 DATE_ALIASES = {
     "fecha",
@@ -98,11 +106,13 @@ class PseConciliador:
         *,
         date_tolerance_days: int = DATE_TOLERANCE_DEFAULT,
         value_tolerance: float = VALUE_TOLERANCE_DEFAULT,
+        temporal_config: ValidacionTemporalConfig | None = None,
     ) -> None:
         self.pse_workbook = load_workbook(filename=BytesIO(pse_bytes))
         self.cruces_workbook = load_workbook(filename=BytesIO(cruces_bytes))
         self.date_tolerance_days = max(0, int(date_tolerance_days))
         self.value_tolerance = max(0.0, float(value_tolerance))
+        self.temporal_config = temporal_config or ValidacionTemporalConfig()
         self.logs: list[dict[str, Any]] = []
         self.alertas: list[str] = []
         self.dataset: list[dict[str, Any]] = []
@@ -113,6 +123,7 @@ class PseConciliador:
         self.pse_entries: list[Movimiento] = []
         self.cruces_entries: list[Movimiento] = []
         self.match_results: list[MatchResult] = []
+        self.rango_operativo: RangoFechas | None = None
 
     def procesar(self) -> dict[str, Any]:
         self.pse_entries = self._extract_movements(self.pse_workbook, self.pse_schemas)
@@ -121,6 +132,7 @@ class PseConciliador:
             self.cruces_schemas,
             only_virtual_pse=True,
         )
+        self._configurar_rango_temporal(self.pse_entries + self.cruces_entries)
         self.match_results = self._conciliar(self.pse_entries, self.cruces_entries)
 
         self._escribir_enriquecimiento_pse(self.match_results)
@@ -153,12 +165,52 @@ class PseConciliador:
         no_accents = "".join(char for char in normalized if not unicodedata.combining(char))
         return no_accents.strip().lower()
 
+    def _configurar_rango_temporal(self, movements: list[Movimiento]) -> None:
+        fechas = [movement.raw_date for movement in movements if movement.raw_date is not None]
+        rango_general = calcular_rango_fechas(fechas)
+        periodo_principal = inferir_periodo_principal(fechas)
+
+        if periodo_principal is None:
+            self.rango_operativo = rango_general
+            return
+
+        fechas_principales = [
+            value
+            for value in fechas
+            if value is not None and (value.year, value.month) == periodo_principal
+        ]
+        if fechas_principales and len(fechas_principales) / max(1, len(fechas)) >= 0.6:
+            self.rango_operativo = calcular_rango_fechas(fechas_principales)
+            self.logs.append(
+                {
+                    "tipo": "info_temporal",
+                    "valor": 0.0,
+                    "fecha": self.rango_operativo.fecha_minima.isoformat() if self.rango_operativo.fecha_minima else None,
+                    "confianza": 1.0,
+                    "detalle": (
+                        f"Periodo principal detectado: {periodo_principal[0]}-{periodo_principal[1]:02d}. "
+                        f"Rango operativo {self.rango_operativo.fecha_minima} a {self.rango_operativo.fecha_maxima}"
+                    ),
+                }
+            )
+            return
+
+        self.rango_operativo = rango_general
+
     def _parse_date(self, cell) -> date | None:
         value = cell.value
         if isinstance(value, datetime):
             return value.date()
         if isinstance(value, date):
             return value
+        if isinstance(value, str):
+            cleaned = value.strip()
+            if cleaned:
+                for fmt in ("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%Y/%m/%d", "%d/%m/%Y %H:%M:%S"):
+                    try:
+                        return datetime.strptime(cleaned, fmt).date()
+                    except Exception:
+                        continue
         if getattr(cell, "is_date", False):
             if isinstance(value, (int, float)):
                 try:
@@ -312,6 +364,23 @@ class PseConciliador:
             return None
         return abs((left - right).days)
 
+    def _temporal_evaluation(self, left: date | None, right: date | None):
+        return evaluar_temporal(left, right, self.temporal_config, self.rango_operativo)
+
+    def _log_temporal_rejection(self, left: Movimiento, right: Movimiento, motivo: str) -> None:
+        self.logs.append(
+            {
+                "tipo": "rechazado_temporal",
+                "valor": round(abs(left.value), 2),
+                "fecha": left.raw_date.isoformat() if left.raw_date else (right.raw_date.isoformat() if right.raw_date else None),
+                "confianza": 0.0,
+                "detalle": (
+                    f"Movimiento rechazado: Fecha PSE: {left.raw_date.isoformat() if left.raw_date else None}. "
+                    f"Fecha cruce: {right.raw_date.isoformat() if right.raw_date else None}. Motivo: {motivo}"
+                ),
+            }
+        )
+
     def _within_value_tolerance(self, left: float, right: float) -> bool:
         return abs(abs(left) - abs(right)) <= self.value_tolerance
 
@@ -325,8 +394,10 @@ class PseConciliador:
                 continue
             if candidate.raw_date is None:
                 continue
-            gap = self._date_gap_days(entry.raw_date, candidate.raw_date)
-            if gap is None or gap > self.date_tolerance_days:
+            decision = self._temporal_evaluation(entry.raw_date, candidate.raw_date)
+            if not decision.permitida:
+                if self._within_value_tolerance(entry.value, candidate.value):
+                    self._log_temporal_rejection(entry, candidate, decision.motivo)
                 continue
             if abs(candidate.value) > abs(entry.value) + self.value_tolerance:
                 continue
@@ -334,6 +405,7 @@ class PseConciliador:
 
         candidates.sort(
             key=lambda item: (
+                self._temporal_evaluation(entry.raw_date, item.raw_date).prioridad or 99,
                 self._date_gap_days(entry.raw_date, item.raw_date) or 999,
                 abs(abs(entry.value) - abs(item.value)),
                 -abs(item.value),
@@ -347,12 +419,12 @@ class PseConciliador:
             for candidate in pool
             if not candidate.matched
             and candidate.raw_date is not None
-            and self._date_gap_days(entry.raw_date, candidate.raw_date) is not None
-            and self._date_gap_days(entry.raw_date, candidate.raw_date) <= self.date_tolerance_days
+            and self._temporal_evaluation(entry.raw_date, candidate.raw_date).permitida
             and self._within_value_tolerance(entry.value, candidate.value)
         ]
         candidates.sort(
             key=lambda item: (
+                self._temporal_evaluation(entry.raw_date, item.raw_date).prioridad or 99,
                 self._date_gap_days(entry.raw_date, item.raw_date) or 999,
                 abs(abs(entry.value) - abs(item.value)),
                 item.row,
@@ -366,12 +438,12 @@ class PseConciliador:
             for candidate in pool
             if not candidate.matched
             and candidate.raw_date is not None
-            and self._date_gap_days(target.raw_date, candidate.raw_date) is not None
-            and self._date_gap_days(target.raw_date, candidate.raw_date) <= self.date_tolerance_days
+            and self._temporal_evaluation(target.raw_date, candidate.raw_date).permitida
             and self._within_value_tolerance(target.value, candidate.value)
         ]
         candidates.sort(
             key=lambda item: (
+                self._temporal_evaluation(target.raw_date, item.raw_date).prioridad or 99,
                 self._date_gap_days(target.raw_date, item.raw_date) or 999,
                 abs(abs(target.value) - abs(item.value)),
                 item.row,

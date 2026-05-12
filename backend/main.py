@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from conciliador import ConciliadorContable
 from integrador import ProcesadorIntegrado
+from validacion_temporal import ValidacionTemporalConfig
 
 
 app = FastAPI(title="Conciliador Contable API", version="1.0.0")
@@ -38,6 +39,9 @@ async def procesar(
     cruces_file: UploadFile | None = File(None),
     tolerance_days: int = Form(1),
     tolerance_value: float = Form(0.01),
+    temporal_tolerance_days: int = Form(0),
+    allow_previous_month: bool = Form(False),
+    allow_previous_year: bool = Form(False),
 ) -> dict:
     if file is None and pse_file is None and cruces_file is None:
         raise HTTPException(status_code=400, detail="Debes enviar al menos un archivo para procesar")
@@ -80,6 +84,11 @@ async def procesar(
             cruces_bytes=cruces_content,
             date_tolerance_days=tolerance_days,
             value_tolerance=tolerance_value,
+            temporal_config=ValidacionTemporalConfig(
+                tolerancia_dias=temporal_tolerance_days,
+                permitir_cruce_mes_anterior=allow_previous_month,
+                permitir_cruce_ano_anterior=allow_previous_year,
+            ),
         )
         return engine.procesar()
     except HTTPException:

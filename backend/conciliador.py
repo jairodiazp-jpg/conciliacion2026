@@ -13,6 +13,14 @@ from openpyxl import load_workbook
 from openpyxl.styles import PatternFill
 from openpyxl.worksheet.worksheet import Worksheet
 
+from validacion_temporal import (
+    RangoFechas,
+    ValidacionTemporalConfig,
+    calcular_rango_fechas,
+    evaluar_temporal,
+    inferir_periodo_principal,
+)
+
 
 UPPER_MARKER = "sin registrar en libros"
 LOWER_MARKER = "sin registrar en el extracto"
@@ -36,16 +44,19 @@ class LedgerEntry:
 
 
 class ConciliadorContable:
-    def __init__(self, file_bytes: bytes) -> None:
+    def __init__(self, file_bytes: bytes, temporal_config: ValidacionTemporalConfig | None = None) -> None:
         self.workbook = load_workbook(filename=BytesIO(file_bytes))
         self.logs: list[dict[str, Any]] = []
         self.cross_id = 1
         self.possible_id = 1
+        self.temporal_config = temporal_config or ValidacionTemporalConfig()
+        self.rango_operativo: RangoFechas | None = None
         self.annotation_columns = self._index_annotation_columns()
 
     def procesar(self) -> dict[str, Any]:
         entries = self._extraer_movimientos()
         self.total_entries = len(entries)
+        self._configurar_rango_temporal(entries)
 
         upper_entries = [entry for entry in entries if entry.section == "upper"]
         lower_entries = [entry for entry in entries if entry.section == "lower"]
@@ -73,6 +84,36 @@ class ConciliadorContable:
         normalized = unicodedata.normalize("NFKD", value)
         no_accents = "".join(char for char in normalized if not unicodedata.combining(char))
         return no_accents.strip().lower()
+
+    def _configurar_rango_temporal(self, entries: list[LedgerEntry]) -> None:
+        fechas = [entry.raw_date for entry in entries if entry.raw_date is not None]
+        rango_general = calcular_rango_fechas(fechas)
+        periodo_principal = inferir_periodo_principal(fechas)
+
+        if periodo_principal is None:
+            self.rango_operativo = rango_general
+            return
+
+        fechas_principales = [
+            value
+            for value in fechas
+            if value is not None and (value.year, value.month) == periodo_principal
+        ]
+        if fechas_principales and len(fechas_principales) / max(1, len(fechas)) >= 0.6:
+            self.rango_operativo = calcular_rango_fechas(fechas_principales)
+            self._append_log(
+                tipo="info_temporal",
+                valor=0.0,
+                fecha=self.rango_operativo.fecha_minima,
+                confianza=1.0,
+                detalle=(
+                    f"Periodo principal detectado: {periodo_principal[0]}-{periodo_principal[1]:02d}. "
+                    f"Rango operativo {self.rango_operativo.fecha_minima} a {self.rango_operativo.fecha_maxima}"
+                ),
+            )
+            return
+
+        self.rango_operativo = rango_general
 
     def _index_annotation_columns(self) -> dict[str, tuple[int | None, int | None]]:
         indexed: dict[str, tuple[int | None, int | None]] = {}
@@ -158,6 +199,14 @@ class ConciliadorContable:
             return value.date()
         if isinstance(value, date):
             return value
+        if isinstance(value, str):
+            cleaned = value.strip()
+            if cleaned:
+                for fmt in ("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%Y/%m/%d", "%d/%m/%Y %H:%M:%S"):
+                    try:
+                        return datetime.strptime(cleaned, fmt).date()
+                    except Exception:
+                        continue
         return None
 
     def _parse_number(self, value: Any) -> str | None:
@@ -282,12 +331,31 @@ class ConciliadorContable:
             return None
         return abs((left - right).days)
 
+    def _temporal_evaluation(self, left: date | None, right: date | None) -> tuple[bool, int | None, str, int | None]:
+        decision = evaluar_temporal(left, right, self.temporal_config, self.rango_operativo)
+        return decision.permitida, decision.prioridad, decision.motivo, decision.diferencia_dias
+
+    def _log_temporal_rejection(self, left: LedgerEntry, right: LedgerEntry, motivo: str) -> None:
+        self._append_log(
+            tipo="rechazado_temporal",
+            valor=left.value,
+            fecha=left.raw_date or right.raw_date,
+            confianza=0.0,
+            detalle=(
+                f"Movimiento rechazado: Fecha PSE: {left.raw_date.isoformat() if left.raw_date else None}. "
+                f"Fecha contable: {right.raw_date.isoformat() if right.raw_date else None}. Motivo: {motivo}"
+            ),
+        )
+
     def _has_same_approval(self, upper: LedgerEntry, lower: LedgerEntry) -> bool:
         upper_approval = self._approval_key(upper)
         lower_approval = self._approval_key(lower)
         return bool(upper_approval and lower_approval and upper_approval == lower_approval)
 
     def _is_confirmed_pair(self, upper: LedgerEntry, lower: LedgerEntry) -> bool:
+        permitida, _, _, _ = self._temporal_evaluation(upper.raw_date, lower.raw_date)
+        if not permitida:
+            return False
         if not self._has_same_approval(upper, lower):
             return False
         if not self._same_abs_value(upper.value, lower.value):
@@ -312,14 +380,17 @@ class ConciliadorContable:
             for lower in candidates:
                 if lower.matched:
                     continue
+                permitida, prioridad, motivo, gap = self._temporal_evaluation(upper.raw_date, lower.raw_date)
+                if not permitida:
+                    if self._has_same_approval(upper, lower) and self._same_abs_value(upper.value, lower.value):
+                        self._log_temporal_rejection(upper, lower, motivo)
+                    continue
                 if not self._is_confirmed_pair(upper, lower):
                     continue
 
-                date_gap = self._date_gap_days(upper.raw_date, lower.raw_date)
-                has_date_match = 0 if date_gap is not None else 1
-                ranked_candidates.append((has_date_match, date_gap or 999, lower))
+                ranked_candidates.append((prioridad or 99, gap or 999, lower))
 
-            candidate = min(ranked_candidates, default=None, key=lambda item: (item[0], item[1]))
+            candidate = min(ranked_candidates, default=None, key=lambda item: (item[0], item[1], item[2].row))
             if candidate is None:
                 continue
             best_lower = candidate[2]
@@ -351,18 +422,23 @@ class ConciliadorContable:
                 continue
 
             best_candidate: LedgerEntry | None = None
-            best_date_gap = 999
+            best_rank: tuple[int, int, int] | None = None
 
             for lower in lowers:
                 if lower.matched or lower.raw_date is None:
                     continue
+                permitida, prioridad, motivo, gap = self._temporal_evaluation(upper.raw_date, lower.raw_date)
+                if not permitida:
+                    if self._same_abs_value(upper.value, lower.value):
+                        self._log_temporal_rejection(upper, lower, motivo)
+                    continue
                 if not self._is_confirmed_pair(upper, lower):
                     continue
 
-                date_gap = abs((upper.raw_date - lower.raw_date).days)
-                if date_gap <= 3 and date_gap < best_date_gap:
+                candidate_rank = (prioridad or 99, gap or 999, lower.row)
+                if best_rank is None or candidate_rank < best_rank:
                     best_candidate = lower
-                    best_date_gap = date_gap
+                    best_rank = candidate_rank
 
             if best_candidate is None:
                 continue
@@ -395,6 +471,11 @@ class ConciliadorContable:
         for entry in pool:
             if entry.matched:
                 continue
+            permitida, _, motivo, _ = self._temporal_evaluation(target_entry.raw_date, entry.raw_date)
+            if not permitida:
+                if self._has_same_approval(target_entry, entry):
+                    self._log_temporal_rejection(target_entry, entry, motivo)
+                continue
             if not self._has_same_approval(target_entry, entry):
                 continue
             date_gap = self._date_gap_days(target_entry.raw_date, entry.raw_date)
@@ -403,7 +484,14 @@ class ConciliadorContable:
             if int(round(abs(entry.value) * 100)) > target_cents:
                 continue
             candidates.append(entry)
-        candidates = sorted(candidates, key=lambda item: abs(item.value), reverse=True)[:18]
+        candidates = sorted(
+            candidates,
+            key=lambda item: (
+                self._temporal_evaluation(target_entry.raw_date, item.raw_date)[1] or 99,
+                self._date_gap_days(target_entry.raw_date, item.raw_date) or 999,
+                -abs(item.value),
+            ),
+        )[:18]
 
         for size in range(2, 5):
             for combo in itertools.combinations(candidates, size):
@@ -481,9 +569,19 @@ class ConciliadorContable:
 
             key = int(round(abs(upper.value) * 100))
             candidates = lower_map.get(key, [])
-            candidate = next((item for item in candidates if not item.matched), None)
+            ranked_candidates: list[tuple[int, int, LedgerEntry]] = []
+            for item in candidates:
+                if item.matched:
+                    continue
+                permitida, prioridad, motivo, gap = self._temporal_evaluation(upper.raw_date, item.raw_date)
+                if not permitida:
+                    self._log_temporal_rejection(upper, item, motivo)
+                    continue
+                ranked_candidates.append((prioridad or 99, gap or 999, item))
+            candidate = min(ranked_candidates, default=None, key=lambda item: (item[0], item[1], item[2].row))
             if candidate is None:
                 continue
+            candidate = candidate[2]
 
             tag = f"Posible Cruce {self.possible_id}"
             upper.matched = True

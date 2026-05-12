@@ -32,6 +32,24 @@ Proyecto fullstack stateless para conciliacion contable de archivos Excel (.xlsx
 5. Preservacion de formato:
    - Solo colorea celda de valor y etiqueta columna siguiente
 
+## Validacion temporal reforzada
+
+El motor ahora aplica una capa estricta de validacion antes de intentar cualquier match:
+
+- No cruza años diferentes por defecto.
+- No cruza meses diferentes por defecto.
+- Calcula rango operativo minimo y maximo para bloquear fechas fuera del periodo cargado.
+- Prioriza coincidencias por mismo dia, misma semana y mismo mes.
+- Registra descartes temporales en los logs para auditar falsos positivos.
+
+### Flags disponibles
+
+- `temporal_tolerance_days`: tolerancia adicional de dias, por defecto `0`.
+- `allow_previous_month`: permite cruce con el mes anterior cuando se habilita de forma explicita.
+- `allow_previous_year`: permite cruce con el ano anterior cuando se habilita de forma explicita.
+
+Estas opciones estan disponibles en el endpoint `POST /procesar` y en el runner local `backend/run_integrado_local.py`.
+
 ## Conciliacion PSE
 
 Se agrego un flujo opcional y desacoplado para conciliar un archivo PSE contra un archivo de cruces contables sin alterar la estructura original del PSE.

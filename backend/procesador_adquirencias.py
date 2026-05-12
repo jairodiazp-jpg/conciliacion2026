@@ -258,7 +258,7 @@ class ProcesadorAdquirencias:
 
                 approval = ""
                 if len(row) >= 6:
-                    approval = self._extraer_token_aprobacion(row[5].value)
+                    approval = self._normalizar_autorizacion(row[5].value)
                 if not approval:
                     approval = self._extraer_aprobacion_en_fila(row)
                 if not approval:
@@ -381,7 +381,11 @@ class ProcesadorAdquirencias:
                     if fecha is None:
                         continue
                     
-                    auth_code = self._extraer_aprobacion_en_fila(row, preferred_col=auth_col)
+                    auth_code = ""
+                    if auth_col is not None and auth_col > 0 and auth_col - 1 < len(row):
+                        auth_code = self._normalizar_autorizacion(row[auth_col - 1].value)
+                    if not auth_code:
+                        auth_code = self._extraer_aprobacion_en_fila(row, preferred_col=auth_col)
                     if not auth_code:
                         continue
                     

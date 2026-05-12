@@ -291,6 +291,7 @@ class ProcesadorIntegrado:
                         self.adquirencias_bytes,
                         contable_result["file"],
                         value_tolerance=self.value_tolerance,
+                        date_tolerance_days=self.date_tolerance_days,
                     )
                     adq_result = procesador_adq.procesar()
                     contable_result["file"] = adq_result["contable_file"]
@@ -363,6 +364,7 @@ class ProcesadorIntegrado:
                     self.adquirencias_bytes,
                     contable_result["file"],
                     value_tolerance=self.value_tolerance,
+                    date_tolerance_days=self.date_tolerance_days,
                 )
                 adq_result = procesador_adq.procesar()
                 contable_result["file"] = adq_result["contable_file"]

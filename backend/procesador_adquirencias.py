@@ -17,10 +17,17 @@ LIGHT_BLUE_FILL = PatternFill(start_color="FFE8F4FF", end_color="FFE8F4FF", fill
 
 
 class ProcesadorAdquirencias:
-    def __init__(self, adquirencias_bytes: bytes, contable_b64: str, value_tolerance: float = 0.01) -> None:
+    def __init__(
+        self,
+        adquirencias_bytes: bytes,
+        contable_b64: str,
+        value_tolerance: float = 0.01,
+        date_tolerance_days: int = 0,
+    ) -> None:
         self.adquirencias_workbook = load_workbook(filename=BytesIO(adquirencias_bytes))
         self.contable_workbook = load_workbook(filename=BytesIO(base64.b64decode(contable_b64)))
         self.value_tolerance = value_tolerance
+        self.date_tolerance_days = max(0, int(date_tolerance_days))
         self.logs: list[dict[str, Any]] = []
         self.adquirencia_counter = 1
         self.annotation_columns_adq = self._index_annotation_columns(self.adquirencias_workbook)
@@ -84,30 +91,74 @@ class ProcesadorAdquirencias:
                         continue
         return None
 
+    def _parse_amount(self, value: Any) -> float | None:
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, (int, float)):
+            return float(value)
+        if not isinstance(value, str):
+            return None
+
+        raw = value.strip()
+        if not raw:
+            return None
+
+        cleaned = raw.replace(" ", "").replace("$", "")
+        if "," in cleaned and "." in cleaned:
+            # Soporta formatos 1.234,56 y 1,234.56
+            if cleaned.rfind(",") > cleaned.rfind("."):
+                cleaned = cleaned.replace(".", "").replace(",", ".")
+            else:
+                cleaned = cleaned.replace(",", "")
+        elif "," in cleaned:
+            cleaned = cleaned.replace(",", ".")
+
+        try:
+            return float(cleaned)
+        except Exception:
+            return None
+
+    def _normalizar_autorizacion(self, value: Any) -> str:
+        if value is None:
+            return ""
+        normalized = self._normalizar_texto(str(value))
+        return "".join(ch for ch in normalized if ch.isalnum())
+
+    def _find_header_columns(
+        self,
+        sheet: Worksheet,
+        *,
+        need_auth: bool = True,
+    ) -> tuple[int | None, int | None, int | None, int]:
+        valor_col: int | None = None
+        fecha_col: int | None = None
+        auth_col: int | None = None
+        header_row = 1
+
+        max_scan = min(sheet.max_row, 30)
+        for row_idx in range(1, max_scan + 1):
+            row = sheet[row_idx]
+            for cell in row:
+                if not isinstance(cell.value, str):
+                    continue
+                header = self._normalizar_texto(cell.value)
+                if valor_col is None and any(x in header for x in {"valor", "monto", "importe", "amount", "consignacion"}):
+                    valor_col = cell.column
+                if fecha_col is None and any(x in header for x in {"fecha", "date", "transaccion", "movimiento", "transaction"}):
+                    fecha_col = cell.column
+                if auth_col is None and any(x in header for x in {"autorizacion", "authorization", "codigo autoriz", "cod autoriz", "auth", "reference"}):
+                    auth_col = cell.column
+            if valor_col is not None and fecha_col is not None and (not need_auth or auth_col is not None):
+                header_row = row_idx
+                break
+
+        return valor_col, fecha_col, auth_col, header_row
+
     def _extraer_adquirencias_con_fila(self) -> list[dict[str, Any]]:
         """Extrae datos de Adquirencias con referencias a celdas."""
         datos = []
         for sheet in self.adquirencias_workbook.worksheets:
-            valor_col = None
-            fecha_col = None
-            auth_col = None
-            max_scan = min(sheet.max_row, 25)
-            header_row = 1
-            
-            for row_idx in range(1, max_scan + 1):
-                for cell in sheet[row_idx]:
-                    if not isinstance(cell.value, str):
-                        continue
-                    header = self._normalizar_texto(cell.value)
-                    if valor_col is None and any(x in header for x in {"valor", "monto", "importe", "amount"}):
-                        valor_col = cell.column
-                    if fecha_col is None and any(x in header for x in {"fecha", "date", "transaccion"}):
-                        fecha_col = cell.column
-                    if auth_col is None and any(x in header for x in {"autorizacion", "codigo", "authorization"}):
-                        auth_col = cell.column
-                if valor_col and fecha_col:
-                    header_row = row_idx
-                    break
+            valor_col, fecha_col, auth_col, header_row = self._find_header_columns(sheet, need_auth=False)
             
             if valor_col is None or fecha_col is None:
                 continue
@@ -119,13 +170,9 @@ class ProcesadorAdquirencias:
                     if valor_cell is None or fecha_cell is None:
                         continue
                     
-                    if isinstance(valor_cell.value, (int, float)):
-                        valor = float(valor_cell.value)
-                    else:
-                        try:
-                            valor = float(str(valor_cell.value or 0).replace(",", "."))
-                        except Exception:
-                            continue
+                    valor = self._parse_amount(valor_cell.value)
+                    if valor is None:
+                        continue
                     
                     if abs(valor) < 0.0001:
                         continue
@@ -138,7 +185,7 @@ class ProcesadorAdquirencias:
                     if auth_col is not None:
                         auth_cell = row[auth_col - 1] if auth_col - 1 < len(row) else None
                         if auth_cell is not None:
-                            auth_code = str(auth_cell.value or "").strip()
+                            auth_code = self._normalizar_autorizacion(auth_cell.value)
                     
                     datos.append({
                         "sheet": sheet.title,
@@ -178,29 +225,28 @@ class ProcesadorAdquirencias:
         if start_row is None:
             start_row = 2
         
-        valor_col_banco = self._find_valor_column(bancolombia_sheet)
-        fecha_col_banco = self._find_fecha_column(bancolombia_sheet)
-        auth_col_banco = self._find_auth_column(bancolombia_sheet)
+        valor_col_banco, fecha_col_banco, auth_col_banco, _ = self._find_header_columns(
+            bancolombia_sheet,
+            need_auth=False,
+        )
+        if valor_col_banco is None or fecha_col_banco is None:
+            return
         
-        adq_by_key: dict[tuple[float, str, str], list[dict]] = {}
+        adq_by_key: dict[tuple[float, str], list[dict]] = {}
         for adq in adquirencias_data:
-            key = (round(abs(adq["valor"]), 2), adq["fecha"].isoformat(), adq["autorizacion"])
+            key = (round(abs(adq["valor"]), 2), adq["autorizacion"])
             adq_by_key.setdefault(key, []).append(adq)
         
-        matched_adq_indices = set()
+        matched_adq_rows: set[tuple[str, int]] = set()
         for bancolombia_row in bancolombia_sheet.iter_rows(min_row=start_row, max_row=bancolombia_sheet.max_row):
             try:
                 valor_cell_banco = bancolombia_row[valor_col_banco - 1] if valor_col_banco - 1 < len(bancolombia_row) else None
                 if valor_cell_banco is None:
                     continue
                 
-                if isinstance(valor_cell_banco.value, (int, float)):
-                    banco_valor = float(valor_cell_banco.value)
-                else:
-                    try:
-                        banco_valor = float(str(valor_cell_banco.value or 0).replace(",", "."))
-                    except Exception:
-                        continue
+                banco_valor = self._parse_amount(valor_cell_banco.value)
+                if banco_valor is None:
+                    continue
                 
                 if abs(banco_valor) < 0.0001:
                     continue
@@ -215,22 +261,31 @@ class ProcesadorAdquirencias:
                 if auth_col_banco is not None:
                     auth_cell_banco = bancolombia_row[auth_col_banco - 1] if auth_col_banco - 1 < len(bancolombia_row) else None
                     if auth_cell_banco is not None:
-                        banco_auth = str(auth_cell_banco.value or "").strip()
+                        banco_auth = self._normalizar_autorizacion(auth_cell_banco.value)
                 
-                banco_fecha_iso = banco_fecha.isoformat() if banco_fecha else ""
-                key = (round(abs(banco_valor), 2), banco_fecha_iso, banco_auth)
+                if banco_fecha is None:
+                    continue
+
+                key = (round(abs(banco_valor), 2), banco_auth)
                 
                 matching_adq = adq_by_key.get(key, [])
                 if not matching_adq:
                     continue
-                
-                adq = matching_adq[0]
-                adq_idx = adquirencias_data.index(adq)
-                
-                if adq_idx in matched_adq_indices:
+
+                adq = None
+                for candidate in matching_adq:
+                    adq_row_key = (candidate["sheet"], candidate["row"])
+                    if adq_row_key in matched_adq_rows:
+                        continue
+                    day_delta = abs((candidate["fecha"] - banco_fecha).days)
+                    if day_delta <= self.date_tolerance_days:
+                        adq = candidate
+                        break
+
+                if adq is None:
                     continue
-                
-                matched_adq_indices.add(adq_idx)
+
+                matched_adq_rows.add((adq["sheet"], adq["row"]))
                 
                 tag = f"Adquirencia {self.adquirencia_counter}"
                 self.adquirencia_counter += 1
@@ -258,40 +313,17 @@ class ProcesadorAdquirencias:
                 self.logs.append({
                     "tipo": "adquirencia_cruzada",
                     "valor": round(abs(banco_valor), 2),
-                    "fecha": (banco_fecha.isoformat() if banco_fecha else adq["fecha"].isoformat()),
+                    "fecha": banco_fecha.isoformat(),
                     "confianza": 0.95,
-                    "detalle": f"{tag}: coincidencia por valor {banco_valor:,.2f}, fecha {key[1]}, código {key[2]} en {bancolombia_sheet.title}:fila {bancolombia_row[0].row}",
+                    "detalle": (
+                        f"{tag}: coincidencia por valor {banco_valor:,.2f}, "
+                        f"fecha {banco_fecha.isoformat()} y código {banco_auth} "
+                        f"en {bancolombia_sheet.title}:fila {bancolombia_row[0].row}"
+                    ),
                 })
                 
             except Exception:
                 continue
-
-    def _find_valor_column(self, sheet: Worksheet) -> int:
-        candidates = ["valor", "monto", "importe", "amount", "consignacion"]
-        for cell in sheet[1]:
-            if isinstance(cell.value, str):
-                h = self._normalizar_texto(cell.value)
-                if any(c in h for c in candidates):
-                    return cell.column
-        return 3
-
-    def _find_fecha_column(self, sheet: Worksheet) -> int | None:
-        candidates = ["fecha", "date", "transaccion", "movimiento"]
-        for cell in sheet[1]:
-            if isinstance(cell.value, str):
-                h = self._normalizar_texto(cell.value)
-                if any(c in h for c in candidates):
-                    return cell.column
-        return None
-
-    def _find_auth_column(self, sheet: Worksheet) -> int | None:
-        candidates = ["autorizacion", "codigo", "authorization", "auth", "reference"]
-        for cell in sheet[1]:
-            if isinstance(cell.value, str):
-                h = self._normalizar_texto(cell.value)
-                if any(c in h for c in candidates):
-                    return cell.column
-        return None
 
     def _anotar_cruce(
         self,

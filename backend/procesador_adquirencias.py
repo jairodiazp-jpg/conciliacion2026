@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import re
 import unicodedata
 from datetime import date, datetime
 from io import BytesIO
@@ -124,6 +125,42 @@ class ProcesadorAdquirencias:
         normalized = self._normalizar_texto(str(value))
         return "".join(ch for ch in normalized if ch.isalnum())
 
+    def _extraer_token_aprobacion(self, value: Any) -> str:
+        if value is None:
+            return ""
+
+        text = self._normalizar_texto(str(value))
+        if not text:
+            return ""
+
+        tokens = re.findall(r"[a-z0-9]{4,30}", text)
+        if not tokens:
+            return ""
+
+        # Priorizamos tokens con digitos (caso real de numeros/codigos de aprobacion).
+        tokens_with_digits = [token for token in tokens if any(ch.isdigit() for ch in token)]
+        ranked = tokens_with_digits if tokens_with_digits else tokens
+        ranked.sort(key=lambda token: (sum(ch.isdigit() for ch in token), len(token)), reverse=True)
+        return ranked[0]
+
+    def _extraer_aprobacion_en_fila(self, row, preferred_col: int | None = None) -> str:
+        if preferred_col is not None and preferred_col > 0 and preferred_col - 1 < len(row):
+            direct = self._extraer_token_aprobacion(row[preferred_col - 1].value)
+            if direct:
+                return direct
+
+        candidates: list[str] = []
+        for cell in row:
+            token = self._extraer_token_aprobacion(cell.value)
+            if token:
+                candidates.append(token)
+
+        if not candidates:
+            return ""
+
+        candidates.sort(key=lambda token: (sum(ch.isdigit() for ch in token), len(token)), reverse=True)
+        return candidates[0]
+
     def _find_header_columns(
         self,
         sheet: Worksheet,
@@ -135,6 +172,23 @@ class ProcesadorAdquirencias:
         auth_col: int | None = None
         header_row = 1
 
+        valor_preferidos = ["valor total", "valor neto"]
+        fecha_preferidas = ["fecha de transaccion", "fecha de compensacion"]
+        auth_preferidas = ["codigo autorizacion", "codigo de autorizacion", "numero aprobacion", "nro aprobacion"]
+
+        valor_candidatos: list[tuple[int, int]] = []
+        fecha_candidatos: list[tuple[int, int]] = []
+        auth_candidatos: list[tuple[int, int]] = []
+
+        def score_header(header: str, preferred: list[str]) -> int:
+            score = 0
+            for index, token in enumerate(preferred):
+                if token == header:
+                    return 1000 - index
+                if token in header:
+                    score = max(score, 500 - index)
+            return score
+
         max_scan = min(sheet.max_row, 30)
         for row_idx in range(1, max_scan + 1):
             row = sheet[row_idx]
@@ -142,11 +196,11 @@ class ProcesadorAdquirencias:
                 if not isinstance(cell.value, str):
                     continue
                 header = self._normalizar_texto(cell.value)
-                if valor_col is None and any(x in header for x in {"valor", "monto", "importe", "amount", "consignacion"}):
-                    valor_col = cell.column
-                if fecha_col is None and any(x in header for x in {"fecha", "date", "transaccion", "movimiento", "transaction"}):
-                    fecha_col = cell.column
-                if auth_col is None and any(
+                if any(x in header for x in {"valor", "monto", "importe", "amount", "consignacion"}):
+                    valor_candidatos.append((score_header(header, valor_preferidos), cell.column))
+                if any(x in header for x in {"fecha", "date", "transaccion", "movimiento", "transaction"}):
+                    fecha_candidatos.append((score_header(header, fecha_preferidas), cell.column))
+                if any(
                     x in header
                     for x in {
                         "autorizacion",
@@ -159,9 +213,22 @@ class ProcesadorAdquirencias:
                         "numero aprob",
                         "num aprob",
                         "nro aprob",
+                        "num operacion",
+                        "numero operacion",
+                        "id transaccion",
+                        "id trx",
+                        "referencia",
+                        "trace",
+                        "nsu",
                     }
                 ):
-                    auth_col = cell.column
+                    auth_candidatos.append((score_header(header, auth_preferidas), cell.column))
+            if valor_col is None and valor_candidatos:
+                valor_col = max(valor_candidatos, key=lambda item: (item[0], -item[1]))[1]
+            if fecha_col is None and fecha_candidatos:
+                fecha_col = max(fecha_candidatos, key=lambda item: (item[0], -item[1]))[1]
+            if auth_col is None and auth_candidatos:
+                auth_col = max(auth_candidatos, key=lambda item: (item[0], -item[1]))[1]
             if valor_col is not None and fecha_col is not None and (not need_auth or auth_col is not None):
                 header_row = row_idx
                 break
@@ -172,9 +239,9 @@ class ProcesadorAdquirencias:
         """Extrae datos de Adquirencias con referencias a celdas."""
         datos = []
         for sheet in self.adquirencias_workbook.worksheets:
-            valor_col, fecha_col, auth_col, header_row = self._find_header_columns(sheet, need_auth=True)
+            valor_col, fecha_col, auth_col, header_row = self._find_header_columns(sheet, need_auth=False)
             
-            if valor_col is None or fecha_col is None or auth_col is None:
+            if valor_col is None or fecha_col is None:
                 continue
             
             for row in sheet.iter_rows(min_row=header_row + 1, max_row=sheet.max_row):
@@ -195,8 +262,7 @@ class ProcesadorAdquirencias:
                     if fecha is None:
                         continue
                     
-                    auth_cell = row[auth_col - 1] if auth_col - 1 < len(row) else None
-                    auth_code = self._normalizar_autorizacion(auth_cell.value if auth_cell is not None else None)
+                    auth_code = self._extraer_aprobacion_en_fila(row, preferred_col=auth_col)
                     if not auth_code:
                         continue
                     
@@ -240,9 +306,9 @@ class ProcesadorAdquirencias:
         
         valor_col_banco, fecha_col_banco, auth_col_banco, _ = self._find_header_columns(
             bancolombia_sheet,
-            need_auth=True,
+            need_auth=False,
         )
-        if valor_col_banco is None or fecha_col_banco is None or auth_col_banco is None:
+        if valor_col_banco is None or fecha_col_banco is None:
             return
         
         adq_by_auth: dict[str, list[dict]] = {}
@@ -269,11 +335,7 @@ class ProcesadorAdquirencias:
                     if fecha_cell_banco is not None:
                         banco_fecha = self._parse_date(fecha_cell_banco.value)
                 
-                banco_auth = ""
-                if auth_col_banco is not None:
-                    auth_cell_banco = bancolombia_row[auth_col_banco - 1] if auth_col_banco - 1 < len(bancolombia_row) else None
-                    if auth_cell_banco is not None:
-                        banco_auth = self._normalizar_autorizacion(auth_cell_banco.value)
+                banco_auth = self._extraer_aprobacion_en_fila(bancolombia_row, preferred_col=auth_col_banco)
                 
                 if banco_fecha is None or not banco_auth:
                     continue

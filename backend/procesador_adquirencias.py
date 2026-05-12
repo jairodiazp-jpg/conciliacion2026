@@ -146,7 +146,21 @@ class ProcesadorAdquirencias:
                     valor_col = cell.column
                 if fecha_col is None and any(x in header for x in {"fecha", "date", "transaccion", "movimiento", "transaction"}):
                     fecha_col = cell.column
-                if auth_col is None and any(x in header for x in {"autorizacion", "authorization", "codigo autoriz", "cod autoriz", "auth", "reference"}):
+                if auth_col is None and any(
+                    x in header
+                    for x in {
+                        "autorizacion",
+                        "authorization",
+                        "codigo autoriz",
+                        "cod autoriz",
+                        "auth",
+                        "reference",
+                        "aprobacion",
+                        "numero aprob",
+                        "num aprob",
+                        "nro aprob",
+                    }
+                ):
                     auth_col = cell.column
             if valor_col is not None and fecha_col is not None and (not need_auth or auth_col is not None):
                 header_row = row_idx
@@ -158,9 +172,9 @@ class ProcesadorAdquirencias:
         """Extrae datos de Adquirencias con referencias a celdas."""
         datos = []
         for sheet in self.adquirencias_workbook.worksheets:
-            valor_col, fecha_col, auth_col, header_row = self._find_header_columns(sheet, need_auth=False)
+            valor_col, fecha_col, auth_col, header_row = self._find_header_columns(sheet, need_auth=True)
             
-            if valor_col is None or fecha_col is None:
+            if valor_col is None or fecha_col is None or auth_col is None:
                 continue
             
             for row in sheet.iter_rows(min_row=header_row + 1, max_row=sheet.max_row):
@@ -181,11 +195,10 @@ class ProcesadorAdquirencias:
                     if fecha is None:
                         continue
                     
-                    auth_code = ""
-                    if auth_col is not None:
-                        auth_cell = row[auth_col - 1] if auth_col - 1 < len(row) else None
-                        if auth_cell is not None:
-                            auth_code = self._normalizar_autorizacion(auth_cell.value)
+                    auth_cell = row[auth_col - 1] if auth_col - 1 < len(row) else None
+                    auth_code = self._normalizar_autorizacion(auth_cell.value if auth_cell is not None else None)
+                    if not auth_code:
+                        continue
                     
                     datos.append({
                         "sheet": sheet.title,
@@ -202,7 +215,7 @@ class ProcesadorAdquirencias:
         return datos
 
     def _cruzar_ambos_archivos(self, adquirencias_data: list[dict[str, Any]]) -> None:
-        """Busca coincidencias por valor+fecha+código y colorea ambos lados."""
+        """Busca coincidencias por número de aprobación y valida fecha+valor exactos."""
         bancolombia_sheet = None
         for sheet in self.contable_workbook.worksheets:
             if "1331" in sheet.title or "690" in sheet.title:
@@ -227,15 +240,14 @@ class ProcesadorAdquirencias:
         
         valor_col_banco, fecha_col_banco, auth_col_banco, _ = self._find_header_columns(
             bancolombia_sheet,
-            need_auth=False,
+            need_auth=True,
         )
-        if valor_col_banco is None or fecha_col_banco is None:
+        if valor_col_banco is None or fecha_col_banco is None or auth_col_banco is None:
             return
         
-        adq_by_key: dict[tuple[float, str], list[dict]] = {}
+        adq_by_auth: dict[str, list[dict]] = {}
         for adq in adquirencias_data:
-            key = (round(abs(adq["valor"]), 2), adq["autorizacion"])
-            adq_by_key.setdefault(key, []).append(adq)
+            adq_by_auth.setdefault(adq["autorizacion"], []).append(adq)
         
         matched_adq_rows: set[tuple[str, int]] = set()
         for bancolombia_row in bancolombia_sheet.iter_rows(min_row=start_row, max_row=bancolombia_sheet.max_row):
@@ -263,12 +275,10 @@ class ProcesadorAdquirencias:
                     if auth_cell_banco is not None:
                         banco_auth = self._normalizar_autorizacion(auth_cell_banco.value)
                 
-                if banco_fecha is None:
+                if banco_fecha is None or not banco_auth:
                     continue
-
-                key = (round(abs(banco_valor), 2), banco_auth)
                 
-                matching_adq = adq_by_key.get(key, [])
+                matching_adq = adq_by_auth.get(banco_auth, [])
                 if not matching_adq:
                     continue
 
@@ -277,10 +287,13 @@ class ProcesadorAdquirencias:
                     adq_row_key = (candidate["sheet"], candidate["row"])
                     if adq_row_key in matched_adq_rows:
                         continue
-                    day_delta = abs((candidate["fecha"] - banco_fecha).days)
-                    if day_delta <= self.date_tolerance_days:
-                        adq = candidate
-                        break
+                    if candidate["fecha"] != banco_fecha:
+                        continue
+                    value_delta = abs(round(abs(candidate["valor"]), 2) - round(abs(banco_valor), 2))
+                    if value_delta > self.value_tolerance:
+                        continue
+                    adq = candidate
+                    break
 
                 if adq is None:
                     continue
@@ -316,8 +329,8 @@ class ProcesadorAdquirencias:
                     "fecha": banco_fecha.isoformat(),
                     "confianza": 0.95,
                     "detalle": (
-                        f"{tag}: coincidencia por valor {banco_valor:,.2f}, "
-                        f"fecha {banco_fecha.isoformat()} y código {banco_auth} "
+                        f"{tag}: coincidencia por aprobacion {banco_auth}, "
+                        f"valor {banco_valor:,.2f} y fecha {banco_fecha.isoformat()} "
                         f"en {bancolombia_sheet.title}:fila {bancolombia_row[0].row}"
                     ),
                 })

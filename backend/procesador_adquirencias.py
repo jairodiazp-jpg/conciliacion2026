@@ -218,11 +218,20 @@ class ProcesadorAdquirencias:
 
     def _extraer_movimientos_690(self) -> tuple[Worksheet | None, list[dict[str, Any]]]:
         sheet = None
+        best_priority = -1
         for candidate in self.contable_workbook.worksheets:
             title = self._normalizar_texto(candidate.title)
-            if "690" in title or "1331" in title or "bancolombia" in title:
+            priority = -1
+            if "690" in title:
+                priority = 3
+            elif "1331" in title:
+                priority = 2
+            elif "bancolombia" in title:
+                priority = 1
+
+            if priority > best_priority:
                 sheet = candidate
-                break
+                best_priority = priority
 
         if sheet is None:
             return None, []
@@ -242,38 +251,47 @@ class ProcesadorAdquirencias:
         if start_row is None:
             start_row = 2
 
-        # Para 690, usar estructura estándar de Bancolombia:
-        # Columna B (idx 1): Fecha
-        # Columna D (idx 3): Valor de consignación
-        # Columna F (idx 5): Código de aprobación
-        # No hacer detección automática, usar posiciones fijas.
-        
+        # Intentar detectar encabezados reales del memorando después del marcador.
+        # Si no se encuentran, caer a la estructura histórica B/D/F.
         valor_col = 4  # Columna D
         fecha_col = 2  # Columna B
+        auth_col = 6  # Columna F
+
+        header_row = start_row
+        detected_valor_col, detected_fecha_col, detected_auth_col, detected_header_row = self._find_header_columns(
+            sheet,
+            start_row=start_row,
+            need_auth=True,
+        )
+        if detected_valor_col is not None and detected_fecha_col is not None and detected_auth_col is not None:
+            valor_col = detected_valor_col
+            fecha_col = detected_fecha_col
+            auth_col = detected_auth_col
+            header_row = detected_header_row
         
         entries: list[dict[str, Any]] = []
-        for row in sheet.iter_rows(min_row=start_row, max_row=sheet.max_row):
+        for row in sheet.iter_rows(min_row=header_row + 1, max_row=sheet.max_row):
             try:
-                # Leer columna B (índice 1) para fecha
-                fecha_cell = row[1] if len(row) > 1 else None
+                # Leer fecha desde la columna detectada (o B por fallback)
+                fecha_cell = row[fecha_col - 1] if fecha_col - 1 < len(row) else None
                 raw_date = self._parse_date(fecha_cell.value) if fecha_cell else None
                 if raw_date is None:
                     continue
                 
-                # Leer columna D (índice 3) para valor
-                valor_cell = row[3] if len(row) > 3 else None
+                # Leer valor desde la columna detectada (o D por fallback)
+                valor_cell = row[valor_col - 1] if valor_col - 1 < len(row) else None
                 if valor_cell is None:
                     continue
                 value = self._parse_amount(valor_cell.value)
                 if value is None or abs(value) < 0.0001:
                     continue
                 
-                # Leer código de aprobación SIEMPRE de columna F (índice 5)
+                # Leer código de aprobación desde la columna detectada (o F por fallback)
                 approval = ""
-                if len(row) > 5:
-                    approval = self._normalizar_autorizacion(row[5].value)
+                if auth_col - 1 < len(row):
+                    approval = self._normalizar_autorizacion(row[auth_col - 1].value)
                 if not approval:
-                    approval = self._extraer_aprobacion_en_fila(row)
+                    approval = self._extraer_aprobacion_en_fila(row, preferred_col=auth_col)
                 if not approval:
                     continue
 

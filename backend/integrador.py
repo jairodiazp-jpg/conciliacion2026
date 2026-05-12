@@ -287,14 +287,28 @@ class ProcesadorIntegrado:
             # Procesar Adquirencias si se proporciona (contable solo)
             if self.adquirencias_bytes is not None:
                 try:
+                    # Si hay archivo de cruces contables, usarlo (contiene la cuenta 690)
+                    # Si no, usar el contable procesado
+                    cruces_b64 = None
+                    if self.cruces_bytes is not None:
+                        cruces_b64 = base64.b64encode(self.cruces_bytes).decode("utf-8")
+                    else:
+                        cruces_b64 = contable_result["file"]
+                    
                     procesador_adq = ProcesadorAdquirencias(
                         self.adquirencias_bytes,
-                        contable_result["file"],
+                        cruces_b64,
                         value_tolerance=self.value_tolerance,
                         date_tolerance_days=self.date_tolerance_days,
                     )
                     adq_result = procesador_adq.procesar()
-                    contable_result["file"] = adq_result["contable_file"]
+                    
+                    # Actualizar el archivo de cruces o contable según cuál se usó
+                    if self.cruces_bytes is not None:
+                        cruces_procesado = adq_result["contable_file"]
+                    else:
+                        contable_result["file"] = adq_result["contable_file"]
+                    
                     logs.extend(procesador_adq.logs)
                     contable_result_with_adq = {
                         "mode": "contable-only",
@@ -302,7 +316,11 @@ class ProcesadorIntegrado:
                         "files": [
                             {
                                 "name": "CONCILIACION_CONTABLE.xlsx",
-                                "file": adq_result["contable_file"],
+                                "file": contable_result["file"],
+                            },
+                            {
+                                "name": "CRUCES_CONTABLES.xlsx" if self.cruces_bytes else "CONTABLE.xlsx",
+                                "file": cruces_procesado if self.cruces_bytes is not None else adq_result["contable_file"],
                             },
                             {
                                 "name": "ADQUIRENCIAS_PROCESADAS.xlsx",
@@ -358,16 +376,31 @@ class ProcesadorIntegrado:
 
         # Fase adicional: Procesar Adquirencias si se proporciona
         adquirencias_file_b64 = None
+        cruces_procesado_b64 = None
         if self.adquirencias_bytes is not None:
             try:
+                # Si hay archivo de cruces contables, usarlo (contiene la cuenta 690)
+                # Si no, usar el contable procesado
+                cruces_o_contable_b64 = None
+                if self.cruces_bytes is not None:
+                    cruces_o_contable_b64 = base64.b64encode(self.cruces_bytes).decode("utf-8")
+                else:
+                    cruces_o_contable_b64 = contable_result["file"]
+                
                 procesador_adq = ProcesadorAdquirencias(
                     self.adquirencias_bytes,
-                    contable_result["file"],
+                    cruces_o_contable_b64,
                     value_tolerance=self.value_tolerance,
                     date_tolerance_days=self.date_tolerance_days,
                 )
                 adq_result = procesador_adq.procesar()
-                contable_result["file"] = adq_result["contable_file"]
+                
+                # Actualizar archivos según cuál se usó
+                if self.cruces_bytes is not None:
+                    cruces_procesado_b64 = adq_result["contable_file"]
+                else:
+                    contable_result["file"] = adq_result["contable_file"]
+                
                 adquirencias_file_b64 = adq_result["adquirencias_file"]
                 logs.extend(procesador_adq.logs)
             except Exception as e:
@@ -383,6 +416,11 @@ class ProcesadorIntegrado:
                 "file": pse_result["file"],
             },
         ]
+        if cruces_procesado_b64 is not None:
+            files.append({
+                "name": "CRUCES_CONTABLES.xlsx",
+                "file": cruces_procesado_b64,
+            })
         if adquirencias_file_b64 is not None:
             files.append({
                 "name": "ADQUIRENCIAS_PROCESADAS.xlsx",

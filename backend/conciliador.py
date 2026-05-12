@@ -128,9 +128,10 @@ class ConciliadorContable:
                         continue
                     header = self._normalizar_texto(cell.value)
 
-                    if comment_col is None and header in {"comentario", "comentarios"}:
+                    # Detectar columnas de comentario/observacion de forma tolerante
+                    if comment_col is None and "coment" in header:
                         comment_col = cell.column
-                    if observation_col is None and header in {"observacion", "observaciones"}:
+                    if observation_col is None and "observ" in header:
                         observation_col = cell.column
 
                 if comment_col is not None and observation_col is not None:

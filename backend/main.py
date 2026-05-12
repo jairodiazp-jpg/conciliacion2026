@@ -12,19 +12,27 @@ from validacion_temporal import ValidacionTemporalConfig
 
 app = FastAPI(title="Conciliador Contable API", version="1.0.0")
 
-allowed_origins = [
-    origin.strip()
-    for origin in os.getenv("ALLOWED_ORIGINS", "*").split(",")
-    if origin.strip()
-]
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=allowed_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+allowed_origins_raw = os.getenv(
+    "ALLOWED_ORIGINS",
+    "https://conciliador-contable.netlify.app,http://localhost:5173,http://127.0.0.1:5173",
 )
+allowed_origins = [origin.strip() for origin in allowed_origins_raw.split(",") if origin.strip()]
+allow_all_origins = "*" in allowed_origins
+
+cors_kwargs = {
+    "allow_methods": ["*"],
+    "allow_headers": ["*"],
+}
+
+if allow_all_origins:
+    # Con credenciales, '*' no es valido en CORS. Usamos regex global y desactivamos credenciales.
+    cors_kwargs["allow_origin_regex"] = ".*"
+    cors_kwargs["allow_credentials"] = False
+else:
+    cors_kwargs["allow_origins"] = allowed_origins
+    cors_kwargs["allow_credentials"] = True
+
+app.add_middleware(CORSMiddleware, **cors_kwargs)
 
 
 @app.get("/health")

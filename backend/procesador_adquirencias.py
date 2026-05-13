@@ -10,6 +10,7 @@ from io import BytesIO
 from typing import Any
 
 from openpyxl import load_workbook
+from openpyxl.cell.cell import MergedCell
 from openpyxl.styles import PatternFill
 from openpyxl.worksheet.worksheet import Worksheet
 
@@ -245,7 +246,7 @@ class ProcesadorAdquirencias:
         for row in sheet.iter_rows(min_row=1, max_row=sheet.max_row):
             texts = [self._normalizar_texto(str(cell.value)) for cell in row if isinstance(cell.value, str) and str(cell.value).strip()]
             if any(any(marker in text for marker in marker_candidates) for text in texts):
-                start_row = row[0].row + 1
+                start_row = int(getattr(row[0], "row", 1)) + 1
                 break
 
         if start_row is None:
@@ -343,14 +344,14 @@ class ProcesadorAdquirencias:
         max_scan = min(sheet.max_row, start_row + 29)
         for row_idx in range(start_row, max_scan + 1):
             row = sheet[row_idx]
-            for cell in row:
+            for col_idx, cell in enumerate(row, start=1):
                 if not isinstance(cell.value, str):
                     continue
                 header = self._normalizar_texto(cell.value)
                 if any(x in header for x in {"valor", "monto", "importe", "amount", "consignacion"}):
-                    valor_candidatos.append((score_header(header, valor_preferidos), cell.column))
+                    valor_candidatos.append((score_header(header, valor_preferidos), col_idx))
                 if any(x in header for x in {"fecha", "date", "transaccion", "movimiento", "transaction"}):
-                    fecha_candidatos.append((score_header(header, fecha_preferidas), cell.column))
+                    fecha_candidatos.append((score_header(header, fecha_preferidas), col_idx))
                 if any(
                     x in header
                     for x in {
@@ -373,7 +374,7 @@ class ProcesadorAdquirencias:
                         "nsu",
                     }
                 ):
-                    auth_candidatos.append((score_header(header, auth_preferidas), cell.column))
+                    auth_candidatos.append((score_header(header, auth_preferidas), col_idx))
             if valor_col is None and valor_candidatos:
                 valor_col = max(valor_candidatos, key=lambda item: (item[0], -item[1]))[1]
             if fecha_col is None and fecha_candidatos:
@@ -536,21 +537,22 @@ class ProcesadorAdquirencias:
         location_text: str,
     ) -> None:
         comment_col, observation_col = annotation_cols.get(sheet.title, (None, None))
+
+        def write_text(cell, text: str) -> None:
+            if isinstance(cell, MergedCell):
+                return
+            current = str(cell.value).strip() if cell.value else ""
+            if current and text not in current:
+                cell.value = f"{current} | {text}"
+            elif not current:
+                cell.value = text
         
         if comment_col is not None:
             comment_cell = sheet.cell(row=row_idx, column=comment_col)
             comment_text = f"{tag} - Cruce con Adquirencias"
-            current = str(comment_cell.value).strip() if comment_cell.value else ""
-            if current and tag not in current:
-                comment_cell.value = f"{current} | {comment_text}"
-            elif not current:
-                comment_cell.value = comment_text
+            write_text(comment_cell, comment_text)
         
         if observation_col is not None:
             observation_cell = sheet.cell(row=row_idx, column=observation_col)
             observation_text = f"{tag} {location_text}"
-            current = str(observation_cell.value).strip() if observation_cell.value else ""
-            if current and tag not in current:
-                observation_cell.value = f"{current} | {observation_text}"
-            elif not current:
-                observation_cell.value = observation_text
+            write_text(observation_cell, observation_text)

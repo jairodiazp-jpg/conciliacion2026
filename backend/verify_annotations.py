@@ -37,22 +37,14 @@ for file_info in result.get('files', []):
                 break
         
         if ws_690:
+            # Requerimiento: escribir en columna J (10)
+            obs_col = 10
             comments_count = 0
-            comment_col = None
-            for col in range(1, ws_690.max_column + 1):
-                header = ws_690.cell(1, col).value
-                if header and isinstance(header, str) and 'coment' in str(header).lower():
-                    comment_col = col
-                    break
-            
-            if comment_col:
-                for row in range(2, ws_690.max_row + 1):
-                    cell = ws_690.cell(row, comment_col)
-                    if cell.value and 'Adquirencia' in str(cell.value):
-                        comments_count += 1
-                print(f"   Hoja 690: {comments_count} comentarios con 'Adquirencia' (todas las filas)")
-            else:
-                print(f"   Hoja 690: No hay columna de comentarios")
+            for row in range(2, ws_690.max_row + 1):
+                cell = ws_690.cell(row, obs_col)
+                if cell.value and 'Adquirencia' in str(cell.value):
+                    comments_count += 1
+            print(f"   Hoja 690: {comments_count} anotaciones con 'Adquirencia' en columna J (todas las filas)")
     
     if 'ADQUIRENCIAS' in file_info['name']:
         print(f"\n2. ADQUIRENCIAS ({file_info['name']}):")
@@ -61,18 +53,18 @@ for file_info in result.get('files', []):
         
         for sheet in adq_wb.worksheets:
             comments_count = 0
-            comment_col = None
+            obs_col = None
             for col in range(1, sheet.max_column + 1):
                 header = sheet.cell(1, col).value
-                if header and isinstance(header, str) and 'coment' in str(header).lower():
-                    comment_col = col
+                if header == 'Observacion':
+                    obs_col = col
                     break
             
-            if comment_col:
+            if obs_col:
                 for row in range(2, sheet.max_row + 1):
-                    cell = sheet.cell(row, comment_col)
+                    cell = sheet.cell(row, obs_col)
                     if cell.value and 'Adquirencia' in str(cell.value):
                         comments_count += 1
-                print(f"   Hoja {sheet.title}: {comments_count} comentarios con 'Adquirencia' (todas las filas)")
+                print(f"   Hoja {sheet.title}: {comments_count} anotaciones con 'Adquirencia' en 'Observacion' (todas las filas)")
 
 print("\n✓ VERIFICACIÓN COMPLETADA")

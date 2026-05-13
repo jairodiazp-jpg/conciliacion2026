@@ -15,7 +15,7 @@ from openpyxl.styles import PatternFill
 from openpyxl.worksheet.worksheet import Worksheet
 
 
-LIGHT_BLUE_FILL = PatternFill(start_color="FFE8F4FF", end_color="FFE8F4FF", fill_type="solid")
+LIGHT_BLUE_FILL = PatternFill(start_color="FF5B9BD5", end_color="FF5B9BD5", fill_type="solid")
 
 
 class ProcesadorAdquirencias:
@@ -537,57 +537,60 @@ class ProcesadorAdquirencias:
         annotation_cols: dict[str, tuple[int | None, int | None]],
         location_text: str,
     ) -> None:
-        """Anota un cruce encontrado. Maneja celdas fusionadas buscando alternativas."""
-        comment_col, observation_col = annotation_cols.get(sheet.title, (None, None))
+        """Anota un cruce encontrado en columna J (observaciones) o búsqueda dinámica."""
+        # Para memorando 690, usar columna J (10)
+        """Anota un cruce encontrado en columna J (memorando) u observaciones (adquirencias)."""
+        col_idx = None
         
-        # Si no se encontraron las columnas en el índice, buscarlas directamente
-        if comment_col is None or observation_col is None:
-            comment_col = None
-            observation_col = None
+        # Para memorando 690, usar columna J (10)
+        if '690' in sheet.title.lower():
+            col_idx = 10  # Columna J
+        else:
+            # Para adquirencias, buscar columna de observaciones (excluir J que tiene datos)
             for col in range(1, min(sheet.max_column + 1, 50)):
                 header = sheet.cell(row=1, column=col).value
                 if header and isinstance(header, str):
                     header_norm = self._normalizar_texto(header)
-                    if comment_col is None and "coment" in header_norm:
-                        comment_col = col
-                    if observation_col is None and "observ" in header_norm:
-                        observation_col = col
-
-        def write_text(col_idx: int, text: str) -> bool:
-            """Intenta escribir en una celda, retorna True si logró escribir."""
-            if col_idx is None:
-                return False
-            
-            cell = sheet.cell(row=row_idx, column=col_idx)
-            
-            # Si es MergedCell, buscar alternativa en otra fila o columna
-            if isinstance(cell, MergedCell):
-                # Intentar otra columna adyacente
-                for alt_col in [col_idx + 1, col_idx - 1, col_idx + 2, col_idx - 2]:
-                    if alt_col < 1 or alt_col > sheet.max_column:
-                        continue
-                    alt_cell = sheet.cell(row=row_idx, column=alt_col)
-                    if not isinstance(alt_cell, MergedCell):
-                        cell = alt_cell
+                    if "observ" in header_norm and col != 10:  # No usar columna J
+                        col_idx = col
                         break
-                else:
-                    # Si todas las columnas adyacentes son fusionadas, pasar
-                    return False
-            
-            try:
-                current = str(cell.value).strip() if cell.value else ""
-                if current and text not in current:
-                    cell.value = f"{current} | {text}"
-                elif not current:
-                    cell.value = text
-                return True
-            except Exception:
-                return False
+            # Si no encuentra, usar de todos modos la indexada
+            if col_idx is None:
+                col_idx, _ = annotation_cols.get(sheet.title, (None, None))
+        # Para adquirencias, siempre buscar columna "Observacion" creada por _ensure_annotation_columns
+        if '690' not in sheet.title.lower() and col_idx is None:
+            # Buscar columna que contiene "Observacion" exacto
+            for col in range(sheet.max_column, 0, -1):
+                header = sheet.cell(row=1, column=col).value
+                if header == "Observacion":
+                    col_idx = col
+                    break
         
-        if comment_col is not None:
-            comment_text = f"{tag} - Cruce con Adquirencias"
-            write_text(comment_col, comment_text)
+        if col_idx is None:
+            return
         
-        if observation_col is not None:
-            observation_text = f"{tag} {location_text}"
-            write_text(observation_col, observation_text)
+        # Escribir en la celda
+        cell = sheet.cell(row=row_idx, column=col_idx)
+        
+        # Si es MergedCell, buscar alternativa en otra columna
+        if isinstance(cell, MergedCell):
+            for alt_col in [col_idx + 1, col_idx - 1, col_idx + 2, col_idx - 2]:
+                if alt_col < 1 or alt_col > sheet.max_column:
+                    continue
+                alt_cell = sheet.cell(row=row_idx, column=alt_col)
+                if not isinstance(alt_cell, MergedCell):
+                    cell = alt_cell
+                    break
+            else:
+                return
+        
+        try:
+            # Construir texto: tag + ubicación
+            text = f"{tag} - {location_text}"
+            current = str(cell.value).strip() if cell.value else ""
+            if current and text not in current:
+                cell.value = f"{current} | {text}"
+            elif not current:
+                cell.value = text
+        except Exception:
+            pass

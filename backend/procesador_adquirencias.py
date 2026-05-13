@@ -34,6 +34,7 @@ class ProcesadorAdquirencias:
         self.adquirencia_counter = 1
         self._ensure_annotation_columns(self.adquirencias_workbook)
         self._ensure_annotation_columns(self.contable_workbook)
+        # Re-indexar después de asegurar las columnas para que la búsqueda las encuentre
         self.annotation_columns_adq = self._index_annotation_columns(self.adquirencias_workbook)
         self.annotation_columns_cont = self._index_annotation_columns(self.contable_workbook)
 
@@ -536,23 +537,57 @@ class ProcesadorAdquirencias:
         annotation_cols: dict[str, tuple[int | None, int | None]],
         location_text: str,
     ) -> None:
+        """Anota un cruce encontrado. Maneja celdas fusionadas buscando alternativas."""
         comment_col, observation_col = annotation_cols.get(sheet.title, (None, None))
+        
+        # Si no se encontraron las columnas en el índice, buscarlas directamente
+        if comment_col is None or observation_col is None:
+            comment_col = None
+            observation_col = None
+            for col in range(1, min(sheet.max_column + 1, 50)):
+                header = sheet.cell(row=1, column=col).value
+                if header and isinstance(header, str):
+                    header_norm = self._normalizar_texto(header)
+                    if comment_col is None and "coment" in header_norm:
+                        comment_col = col
+                    if observation_col is None and "observ" in header_norm:
+                        observation_col = col
 
-        def write_text(cell, text: str) -> None:
+        def write_text(col_idx: int, text: str) -> bool:
+            """Intenta escribir en una celda, retorna True si logró escribir."""
+            if col_idx is None:
+                return False
+            
+            cell = sheet.cell(row=row_idx, column=col_idx)
+            
+            # Si es MergedCell, buscar alternativa en otra fila o columna
             if isinstance(cell, MergedCell):
-                return
-            current = str(cell.value).strip() if cell.value else ""
-            if current and text not in current:
-                cell.value = f"{current} | {text}"
-            elif not current:
-                cell.value = text
+                # Intentar otra columna adyacente
+                for alt_col in [col_idx + 1, col_idx - 1, col_idx + 2, col_idx - 2]:
+                    if alt_col < 1 or alt_col > sheet.max_column:
+                        continue
+                    alt_cell = sheet.cell(row=row_idx, column=alt_col)
+                    if not isinstance(alt_cell, MergedCell):
+                        cell = alt_cell
+                        break
+                else:
+                    # Si todas las columnas adyacentes son fusionadas, pasar
+                    return False
+            
+            try:
+                current = str(cell.value).strip() if cell.value else ""
+                if current and text not in current:
+                    cell.value = f"{current} | {text}"
+                elif not current:
+                    cell.value = text
+                return True
+            except Exception:
+                return False
         
         if comment_col is not None:
-            comment_cell = sheet.cell(row=row_idx, column=comment_col)
             comment_text = f"{tag} - Cruce con Adquirencias"
-            write_text(comment_cell, comment_text)
+            write_text(comment_col, comment_text)
         
         if observation_col is not None:
-            observation_cell = sheet.cell(row=row_idx, column=observation_col)
             observation_text = f"{tag} {location_text}"
-            write_text(observation_cell, observation_text)
+            write_text(observation_col, observation_text)

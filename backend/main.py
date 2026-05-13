@@ -92,8 +92,11 @@ async def procesar(
 
         if pse_content is not None and cruces_content is None:
             raise HTTPException(status_code=400, detail="Debes enviar el archivo PSE junto con el archivo de cruces contables")
-        if cruces_content is not None and pse_content is None:
-            raise HTTPException(status_code=400, detail="Debes enviar el archivo de cruces contables junto con el archivo PSE")
+        if cruces_content is not None and pse_content is None and contable_content is None and adquirencias_content is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Debes enviar el archivo de cruces contables junto con PSE, Contable o Adquirencias",
+            )
 
         engine = ProcesadorIntegrado(
             contable_bytes=contable_content,

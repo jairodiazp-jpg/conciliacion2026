@@ -199,18 +199,23 @@ function App() {
 
         .brand-box {
           display: flex;
-          align-items: center;
-          gap: 14px;
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 10px;
           padding-bottom: 16px;
           border-bottom: 1px solid rgba(37, 99, 235, 0.08);
         }
 
-        .brand-mark {
-          width: 48px;
-          height: 48px;
-          border-radius: 16px;
-          background: linear-gradient(135deg, var(--accent), var(--accent-2));
-          box-shadow: 0 16px 28px rgba(37, 99, 235, 0.18);
+        .brand-logo {
+          width: 220px;
+          max-width: 100%;
+          height: auto;
+          display: block;
+        }
+
+        .brand-meta {
+          display: grid;
+          gap: 4px;
         }
 
         .brand-name {
@@ -796,8 +801,8 @@ function App() {
       <main className="container">
         <aside className="panel sidebar">
           <div className="brand-box">
-            <div className="brand-mark" />
-            <div>
+            <img className="brand-logo" src="/calypso-logo.svg" alt="CALYPSO" />
+            <div className="brand-meta">
               <h1 className="brand-name">Conciliador 2026</h1>
               <p className="brand-subtitle">Automatización de cruces contables</p>
             </div>

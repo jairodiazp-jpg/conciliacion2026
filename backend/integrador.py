@@ -328,13 +328,20 @@ class ProcesadorIntegrado:
             # Procesar Adquirencias si se proporciona (contable solo)
             if self.adquirencias_bytes is not None:
                 try:
-                    # Si hay archivo de cruces contables, usarlo (contiene la cuenta 690)
-                    # Si no, usar el contable procesado
-                    cruces_b64 = None
-                    if self.cruces_bytes is not None:
-                        cruces_b64 = base64.b64encode(self.cruces_bytes).decode("utf-8")
-                    else:
+                    # Si el memorando (contable) y el archivo de cruces son el mismo,
+                    # aplicar Adquirencias sobre el mismo workbook ya conciliado para
+                    # evitar generar archivos separados.
+                    same_memorando_and_cruces = (
+                        self.contable_bytes is not None
+                        and self.cruces_bytes is not None
+                        and self.contable_bytes == self.cruces_bytes
+                    )
+
+                    cruces_b64: str
+                    if same_memorando_and_cruces or self.cruces_bytes is None:
                         cruces_b64 = contable_result["file"]
+                    else:
+                        cruces_b64 = base64.b64encode(self.cruces_bytes).decode("utf-8")
                     
                     procesador_adq = ProcesadorAdquirencias(
                         self.adquirencias_bytes,
@@ -343,36 +350,48 @@ class ProcesadorIntegrado:
                         date_tolerance_days=self.date_tolerance_days,
                     )
                     adq_result = procesador_adq.procesar()
-                    
-                    # Actualizar el archivo de cruces o contable según cuál se usó
-                    if self.cruces_bytes is not None:
-                        cruces_procesado = adq_result["contable_file"]
-                    else:
+
+                    # Si se trabajó sobre el mismo memorando, el resultado es el memorando final.
+                    # En caso contrario, respetar el comportamiento previo (cruces separado).
+                    if same_memorando_and_cruces or self.cruces_bytes is None:
                         contable_result["file"] = adq_result["contable_file"]
-                    
+                        cruces_procesado = None
+                        adquirencias_file_b64 = None
+                    else:
+                        cruces_procesado = adq_result["contable_file"]
+                        adquirencias_file_b64 = adq_result["adquirencias_file"]
+
                     logs.extend(procesador_adq.logs)
-                    contable_result_with_adq = {
-                        "mode": "contable-only",
-                        "contable": contable_result,
-                        "files": [
+
+                    files: list[dict[str, str]] = [
+                        {
+                            "name": "CONCILIACION_CONTABLE.xlsx",
+                            "file": contable_result["file"],
+                        }
+                    ]
+                    if cruces_procesado is not None:
+                        files.append(
                             {
-                                "name": "CONCILIACION_CONTABLE.xlsx",
-                                "file": contable_result["file"],
-                            },
-                            {
-                                "name": "CRUCES_CONTABLES.xlsx" if self.cruces_bytes else "CONTABLE.xlsx",
-                                "file": cruces_procesado if self.cruces_bytes is not None else adq_result["contable_file"],
-                            },
+                                "name": "CRUCES_CONTABLES.xlsx",
+                                "file": cruces_procesado,
+                            }
+                        )
+                    if adquirencias_file_b64 is not None:
+                        files.append(
                             {
                                 "name": "ADQUIRENCIAS_PROCESADAS.xlsx",
-                                "file": adq_result["adquirencias_file"],
-                            },
-                        ],
+                                "file": adquirencias_file_b64,
+                            }
+                        )
+
+                    return {
+                        "mode": "contable-only",
+                        "contable": contable_result,
+                        "files": files,
                         "logs": logs,
                         "alertas": alertas,
                         "resumen": contable_result.get("resumen", {}),
                     }
-                    return contable_result_with_adq
                 except Exception as e:
                     alertas.append(f"Fallo en procesamiento de Adquirencias: {e}")
             return contable_result
@@ -420,13 +439,19 @@ class ProcesadorIntegrado:
         cruces_procesado_b64 = None
         if self.adquirencias_bytes is not None:
             try:
-                # Si hay archivo de cruces contables, usarlo (contiene la cuenta 690)
-                # Si no, usar el contable procesado
-                cruces_o_contable_b64 = None
-                if self.cruces_bytes is not None:
-                    cruces_o_contable_b64 = base64.b64encode(self.cruces_bytes).decode("utf-8")
-                else:
+                # Si el memorando (contable) y el archivo de cruces son el mismo,
+                # integrar Adquirencias en el mismo Excel conciliado.
+                same_memorando_and_cruces = (
+                    self.contable_bytes is not None
+                    and self.cruces_bytes is not None
+                    and self.contable_bytes == self.cruces_bytes
+                )
+
+                cruces_o_contable_b64: str
+                if same_memorando_and_cruces or self.cruces_bytes is None:
                     cruces_o_contable_b64 = contable_result["file"]
+                else:
+                    cruces_o_contable_b64 = base64.b64encode(self.cruces_bytes).decode("utf-8")
                 
                 procesador_adq = ProcesadorAdquirencias(
                     self.adquirencias_bytes,
@@ -435,14 +460,16 @@ class ProcesadorIntegrado:
                     date_tolerance_days=self.date_tolerance_days,
                 )
                 adq_result = procesador_adq.procesar()
-                
-                # Actualizar archivos según cuál se usó
-                if self.cruces_bytes is not None:
-                    cruces_procesado_b64 = adq_result["contable_file"]
-                else:
+
+                # Si se integró en el memorando, no retornar archivos adicionales.
+                if same_memorando_and_cruces or self.cruces_bytes is None:
                     contable_result["file"] = adq_result["contable_file"]
-                
-                adquirencias_file_b64 = adq_result["adquirencias_file"]
+                    cruces_procesado_b64 = None
+                    adquirencias_file_b64 = None
+                else:
+                    cruces_procesado_b64 = adq_result["contable_file"]
+                    adquirencias_file_b64 = adq_result["adquirencias_file"]
+
                 logs.extend(procesador_adq.logs)
             except Exception as e:
                 alertas.append(f"Fallo en procesamiento de Adquirencias: {e}")

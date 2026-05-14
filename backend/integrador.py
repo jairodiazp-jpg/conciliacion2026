@@ -416,11 +416,11 @@ class ProcesadorIntegrado:
                     adq_result = procesador_adq.procesar()
 
                     # Si se trabajó sobre el mismo memorando, el resultado es el memorando final.
-                    # En caso contrario, respetar el comportamiento previo (cruces separado).
+                    # Siempre devolver el archivo de Adquirencias procesado para descarga.
                     if same_memorando_and_cruces or self.cruces_bytes is None:
                         contable_result["file"] = adq_result["contable_file"]
                         cruces_procesado = None
-                        adquirencias_file_b64 = None
+                        adquirencias_file_b64 = adq_result["adquirencias_file"]
                     else:
                         cruces_procesado = adq_result["contable_file"]
                         adquirencias_file_b64 = adq_result["adquirencias_file"]
@@ -525,11 +525,12 @@ class ProcesadorIntegrado:
                 )
                 adq_result = procesador_adq.procesar()
 
-                # Si se integró en el memorando, no retornar archivos adicionales.
+                # Si se integró en el memorando, no retornar archivos separados de cruces.
+                # Siempre devolver el archivo de Adquirencias procesado.
                 if same_memorando_and_cruces or self.cruces_bytes is None:
                     contable_result["file"] = adq_result["contable_file"]
                     cruces_procesado_b64 = None
-                    adquirencias_file_b64 = None
+                    adquirencias_file_b64 = adq_result["adquirencias_file"]
                 else:
                     cruces_procesado_b64 = adq_result["contable_file"]
                     adquirencias_file_b64 = adq_result["adquirencias_file"]

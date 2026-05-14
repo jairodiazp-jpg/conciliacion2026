@@ -9,11 +9,15 @@ from typing import Any
 
 from conciliador import ConciliadorContable
 from openpyxl import load_workbook
+from openpyxl.styles import PatternFill
 from openpyxl.utils.datetime import from_excel
 from pse_conciliador import PseConciliador
 from agrupacion_pse import conciliacion_por_agrupacion
 from procesador_adquirencias import ProcesadorAdquirencias
 from validacion_temporal import ValidacionTemporalConfig, evaluar_temporal
+
+
+PSE_GROUP_FILL = PatternFill(start_color="FFF5D0FE", end_color="FFF5D0FE", fill_type="solid")
 
 
 @dataclass
@@ -106,6 +110,46 @@ class ProcesadorIntegrado:
         if text.lower() in current.lower():
             return current
         return f"{current} | {text}"
+
+    def _is_empty_fill(self, cell) -> bool:
+        fill = getattr(cell, "fill", None)
+        if fill is None:
+            return True
+        pattern = getattr(fill, "patternType", None)
+        if pattern is None:
+            return True
+        if str(pattern).lower() in {"none", "null"}:
+            return True
+        fg = getattr(fill, "fgColor", None)
+        rgb = getattr(fg, "rgb", None) if fg is not None else None
+        if rgb in (None, "00000000", "FFFFFFFF"):
+            return True
+        return False
+
+    def _apply_fill_if_empty(self, cell, fill: PatternFill) -> None:
+        if self._is_empty_fill(cell):
+            cell.fill = fill
+
+    def _find_best_numeric_cell(self, sheet, row_idx: int):
+        """Retorna la celda con el valor numérico más representativo en la fila."""
+        best_cell = None
+        best_abs = 0.0
+        for col_idx in range(1, sheet.max_column + 1):
+            cell = sheet.cell(row=row_idx, column=col_idx)
+            value = cell.value
+            if value is None or isinstance(value, bool):
+                continue
+            if getattr(cell, "is_date", False):
+                continue
+            if not isinstance(value, (int, float)):
+                continue
+            numeric = float(value)
+            if abs(numeric) < 0.0001:
+                continue
+            if best_cell is None or abs(numeric) > best_abs:
+                best_cell = cell
+                best_abs = abs(numeric)
+        return best_cell
 
     def _parse_row_date(self, row) -> datetime | None:
         for cell in row:
@@ -221,7 +265,7 @@ class ProcesadorIntegrado:
 
     def _merge_pse_comments_into_contable(self, contable_b64: str, dataset_cruces: list[dict[str, Any]]) -> str:
         workbook = load_workbook(filename=BytesIO(base64.b64decode(contable_b64)))
-        annotation_columns = self._index_annotation_columns(workbook)
+        annotation_columns = self._ensure_annotation_columns(workbook)
         for row in dataset_cruces:
             sheet_name = row.get("sheet")
             excel_row = row.get("row")
@@ -244,6 +288,26 @@ class ProcesadorIntegrado:
             comment_col, observation_col = annotation_columns.get(sheet_name, (None, None))
             group_id = str(row.get("id_grupo_conciliacion") or "").strip()
             group_text = f"[{group_id}]" if group_id else ""
+
+            # Colorear el valor del memorando cuando exista un grupo PSE conciliado.
+            if group_id and estado and estado != "Sin coincidencia":
+                try:
+                    value_cell = None
+                    try:
+                        value_col = self._find_value_column(sheet)
+                        candidate = sheet.cell(row=excel_row_int, column=value_col)
+                        if isinstance(candidate.value, (int, float)) and not isinstance(candidate.value, bool):
+                            value_cell = candidate
+                    except Exception:
+                        value_cell = None
+
+                    if value_cell is None:
+                        value_cell = self._find_best_numeric_cell(sheet, excel_row_int)
+                    if value_cell is not None:
+                        self._apply_fill_if_empty(value_cell, PSE_GROUP_FILL)
+                except Exception:
+                    pass
+
             if comment_col is not None:
                 comment_cell = sheet.cell(row=excel_row_int, column=comment_col)
                 base_comment = comentario if comentario else valores
@@ -252,8 +316,8 @@ class ProcesadorIntegrado:
                 comment_cell.value = self._append_text_once(comment_cell.value, comment_text)
             if observation_col is not None:
                 observation_cell = sheet.cell(row=excel_row_int, column=observation_col)
-                base_observation = valores if valores else "Reclasificacion PSE detectada"
-                observation_text = f"{group_text} {base_observation}".strip() if group_text else base_observation
+                base_observation = comentario if comentario else valores if valores else "Reclasificacion PSE detectada"
+                observation_text = f"{group_text} {estado} - {base_observation}".strip() if group_text else base_observation
                 observation_cell.value = self._append_text_once(observation_cell.value, observation_text)
         output_stream = BytesIO()
         workbook.save(output_stream)
@@ -656,6 +720,11 @@ class ProcesadorIntegrado:
                     if abs(abs(v) - abs(total_value)) <= self.value_tolerance:
                         # añadir comentario y observacion si existen columnas
                         comment_col, observation_col = annotation_cols_cache.get(sheet.title, (None, None))
+                        try:
+                            value_cell = sheet.cell(row=r, column=target_val_col)
+                            self._apply_fill_if_empty(value_cell, PSE_GROUP_FILL)
+                        except Exception:
+                            pass
                         if comment_col is not None:
                             ccell = sheet.cell(row=r, column=comment_col)
                             ccell.value = self._append_text_once(ccell.value, comment_text)
@@ -725,6 +794,14 @@ class ProcesadorIntegrado:
                 sheet.cell(row=row_idx, column=id_col).value = matched_group
                 if not estado_val:
                     sheet.cell(row=row_idx, column=estado_col).value = 'Conciliado por agrupación'
+
+                try:
+                    value_col = mapping.get('valor') or self._find_value_column(sheet)
+                    value_cell = sheet.cell(row=row_idx, column=int(value_col))
+                    self._apply_fill_if_empty(value_cell, PSE_GROUP_FILL)
+                except Exception:
+                    pass
+
                 if comment_col is not None:
                     ccell = sheet.cell(row=row_idx, column=comment_col)
                     asociados = sorted(pse_group_values.get(matched_group, []), reverse=True)
@@ -732,7 +809,7 @@ class ProcesadorIntegrado:
                     n_asociados = len(asociados)
                     detalle_asociados = f"Pagos PSE asociados ({n_asociados}): {asociados_text}" if n_asociados else ""
                     comentario = (
-                        f"Cruce PSE ({matched_group}) - Coincidencia por valor y fecha en {sheet.title}: fila {row_idx}={abs(row_value):,.2f}. "
+                        f"Cruce PSE ({matched_group}) - Coincidencia por valor y fecha en {sheet.title}: fila {row_idx}={abs(row_value):,.2f} (fecha {row_date.isoformat()}). "
                         + detalle_asociados
                     ).strip()
                     ccell.value = self._append_text_once(ccell.value, comentario)

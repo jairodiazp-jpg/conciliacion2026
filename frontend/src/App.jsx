@@ -647,9 +647,11 @@ function App() {
         .logs-panel {
           border-radius: 24px;
           overflow: hidden;
-          background: linear-gradient(180deg, #fff, #fbfdff);
-          border: 1px solid rgba(37, 99, 235, 0.08);
-          box-shadow: 0 24px 70px rgba(15, 23, 42, 0.06);
+          background:
+            radial-gradient(circle at top right, rgba(59, 130, 246, 0.06), transparent 36%),
+            linear-gradient(180deg, #fff, #fbfdff);
+          border: 1px solid rgba(37, 99, 235, 0.09);
+          box-shadow: 0 24px 70px rgba(15, 23, 42, 0.07);
         }
 
         .logs-header {
@@ -684,6 +686,97 @@ function App() {
           color: var(--muted);
         }
 
+        .logs-toolbar {
+          display: grid;
+          gap: 14px;
+          padding: 0 22px 16px;
+          border-bottom: 1px solid rgba(37, 99, 235, 0.08);
+          background: linear-gradient(180deg, rgba(248, 251, 255, 0.85), rgba(255, 255, 255, 0.55));
+        }
+
+        .logs-kpis {
+          display: grid;
+          gap: 10px;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .kpi-card {
+          padding: 12px 14px;
+          border-radius: 14px;
+          border: 1px solid rgba(37, 99, 235, 0.12);
+          background: rgba(255, 255, 255, 0.84);
+          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+        }
+
+        .kpi-card p {
+          margin: 0;
+          color: var(--muted);
+          font-size: 0.78rem;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+        }
+
+        .kpi-card strong {
+          display: block;
+          margin-top: 6px;
+          color: #0f172a;
+          font-family: "Space Grotesk", sans-serif;
+          font-size: 1.1rem;
+          letter-spacing: -0.02em;
+        }
+
+        .logs-filters {
+          display: grid;
+          gap: 10px;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+
+        .filter-field {
+          display: grid;
+          gap: 6px;
+          color: var(--muted-strong);
+          font-size: 0.78rem;
+          font-weight: 700;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+        }
+
+        .filter-input,
+        .filter-select {
+          width: 100%;
+          border: 1px solid rgba(37, 99, 235, 0.18);
+          border-radius: 12px;
+          background: rgba(255, 255, 255, 0.95);
+          color: #0f172a;
+          padding: 10px 11px;
+          font-size: 0.88rem;
+          font-weight: 500;
+          transition: border-color 160ms ease, box-shadow 160ms ease;
+        }
+
+        .filter-input:focus,
+        .filter-select:focus {
+          outline: none;
+          border-color: rgba(37, 99, 235, 0.45);
+          box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+        }
+
+        .filter-range {
+          align-content: end;
+        }
+
+        .filter-slider {
+          width: 100%;
+          accent-color: #2563eb;
+          cursor: pointer;
+        }
+
+        .logs-table-wrap {
+          overflow-x: auto;
+          background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(248, 251, 255, 0.8));
+        }
+
         .logs-table {
           width: 100%;
           border-collapse: collapse;
@@ -706,10 +799,72 @@ function App() {
           color: var(--muted-strong);
           vertical-align: top;
           background: #fff;
+          transition: background 160ms ease;
         }
 
         .logs-table tbody tr:nth-child(even) td {
           background: #fbfdff;
+        }
+
+        .logs-table-interactive tbody tr:hover td {
+          background: #f6faff;
+        }
+
+        .log-row-id {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-width: 28px;
+          height: 28px;
+          border-radius: 999px;
+          border: 1px solid rgba(15, 23, 42, 0.08);
+          background: #fff;
+          font-size: 0.8rem;
+          font-weight: 800;
+          color: #334155;
+        }
+
+        .log-type-chip {
+          display: inline-flex;
+          align-items: center;
+          padding: 5px 10px;
+          border-radius: 999px;
+          font-size: 0.74rem;
+          font-weight: 800;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          border: 1px solid transparent;
+          white-space: nowrap;
+        }
+
+        .type-aprobacion {
+          background: #dbeafe;
+          color: #1e40af;
+          border-color: rgba(37, 99, 235, 0.18);
+        }
+
+        .type-valor-fecha {
+          background: #dcfce7;
+          color: #047857;
+          border-color: rgba(5, 150, 105, 0.18);
+        }
+
+        .type-adquirencia {
+          background: #dbeafe;
+          color: #1d4ed8;
+          border-color: rgba(29, 78, 216, 0.2);
+        }
+
+        .type-posible {
+          background: #fef3c7;
+          color: #92400e;
+          border-color: rgba(217, 119, 6, 0.2);
+        }
+
+        .type-default {
+          background: #e2e8f0;
+          color: #334155;
+          border-color: rgba(51, 65, 85, 0.14);
         }
 
         .logs-value {
@@ -722,6 +877,82 @@ function App() {
           min-width: 420px;
           line-height: 1.6;
           color: var(--muted);
+        }
+
+        .log-detail-wrap {
+          min-width: 340px;
+          max-width: 620px;
+        }
+
+        .log-detail-text {
+          margin: 0;
+          line-height: 1.6;
+          color: var(--muted);
+          word-break: break-word;
+          transition: max-height 180ms ease;
+        }
+
+        .log-detail-text.collapsed {
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+        }
+
+        .log-detail-text.expanded {
+          display: block;
+        }
+
+        .confidence-pill {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-width: 58px;
+          padding: 5px 10px;
+          border-radius: 999px;
+          font-size: 0.78rem;
+          font-weight: 800;
+          border: 1px solid transparent;
+        }
+
+        .confidence-high {
+          background: #dcfce7;
+          color: #166534;
+          border-color: rgba(22, 101, 52, 0.2);
+        }
+
+        .confidence-mid {
+          background: #fef3c7;
+          color: #92400e;
+          border-color: rgba(146, 64, 14, 0.2);
+        }
+
+        .confidence-low {
+          background: #fee2e2;
+          color: #991b1b;
+          border-color: rgba(153, 27, 27, 0.2);
+        }
+
+        .row-action-btn {
+          border: 1px solid rgba(37, 99, 235, 0.2);
+          background: rgba(37, 99, 235, 0.06);
+          color: #1d4ed8;
+          font-weight: 700;
+          padding: 7px 10px;
+          border-radius: 10px;
+          cursor: pointer;
+          white-space: nowrap;
+          transition: background 160ms ease, transform 140ms ease;
+        }
+
+        .row-action-btn:hover {
+          background: rgba(37, 99, 235, 0.12);
+          transform: translateY(-1px);
+        }
+
+        .row-action-btn:focus-visible {
+          outline: none;
+          box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
         }
 
         .empty-state {
@@ -792,7 +1023,16 @@ function App() {
             align-items: flex-start;
           }
 
+          .logs-kpis,
+          .logs-filters {
+            grid-template-columns: 1fr;
+          }
+
           .logs-detail {
+            min-width: 280px;
+          }
+
+          .log-detail-wrap {
             min-width: 280px;
           }
         }

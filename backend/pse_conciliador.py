@@ -295,13 +295,15 @@ class PseConciliador:
         return None
 
     def _is_virtual_pse_row(self, row, schema: SheetSchema) -> bool:
-        if schema.description_col is None:
-            return False
-        if schema.description_col - 1 >= len(row):
-            return False
-
-        description_text = self._normalizar_texto(self._stringify(row[schema.description_col - 1].value))
-        return PSE_DESCRIPTION_MARKER in description_text
+        # Primero intenta buscar en la columna de descripción si existe
+        if schema.description_col is not None and schema.description_col - 1 < len(row):
+            description_text = self._normalizar_texto(self._stringify(row[schema.description_col - 1].value))
+            if PSE_DESCRIPTION_MARKER in description_text:
+                return True
+        
+        # Si no hay descripción o no se encontró el marcador, busca en todas las celdas
+        texts = [self._normalizar_texto(self._stringify(cell.value)) for cell in row if isinstance(cell.value, str)]
+        return any(PSE_DESCRIPTION_MARKER in text for text in texts)
 
     def _resolve_account_label(self, sheet: Worksheet, row, schema: SheetSchema) -> str:
         if schema.account_col is not None:

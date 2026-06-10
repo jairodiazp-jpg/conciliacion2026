@@ -7,10 +7,13 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from conciliador import ConciliadorContable
 from integrador import ProcesadorIntegrado
+from version import get_app_version
 from validacion_temporal import ValidacionTemporalConfig
 
 
-app = FastAPI(title="Conciliador Contable API", version="1.0.0")
+APP_VERSION = get_app_version()
+
+app = FastAPI(title="Conciliador Contable API", version=APP_VERSION)
 
 allowed_origins_raw = os.getenv(
     "ALLOWED_ORIGINS",
@@ -37,11 +40,15 @@ app.add_middleware(CORSMiddleware, **cors_kwargs)
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "ok"}
+    return {"status": "ok", "version": APP_VERSION}
 
 
-@app.post("/procesar")
-async def procesar(
+@app.get("/version")
+def version() -> dict[str, str]:
+    return {"version": APP_VERSION}
+
+
+async def _procesar_archivos(
     file: UploadFile | None = File(None),
     pse_file: UploadFile | None = File(None),
     cruces_file: UploadFile | None = File(None),
@@ -116,3 +123,53 @@ async def procesar(
         raise
     except Exception:
         raise HTTPException(status_code=500, detail="Error procesando los archivos")
+
+
+@app.post("/procesar")
+async def procesar(
+    file: UploadFile | None = File(None),
+    pse_file: UploadFile | None = File(None),
+    cruces_file: UploadFile | None = File(None),
+    adquirencias_file: UploadFile | None = File(None),
+    tolerance_days: int = Form(1),
+    tolerance_value: float = Form(0.01),
+    temporal_tolerance_days: int = Form(0),
+    allow_previous_month: bool = Form(False),
+    allow_previous_year: bool = Form(False),
+) -> dict:
+    return await _procesar_archivos(
+        file=file,
+        pse_file=pse_file,
+        cruces_file=cruces_file,
+        adquirencias_file=adquirencias_file,
+        tolerance_days=tolerance_days,
+        tolerance_value=tolerance_value,
+        temporal_tolerance_days=temporal_tolerance_days,
+        allow_previous_month=allow_previous_month,
+        allow_previous_year=allow_previous_year,
+    )
+
+
+@app.post("/pse/conciliar")
+async def conciliar_pse(
+    file: UploadFile | None = File(None),
+    pse_file: UploadFile | None = File(None),
+    cruces_file: UploadFile | None = File(None),
+    adquirencias_file: UploadFile | None = File(None),
+    tolerance_days: int = Form(1),
+    tolerance_value: float = Form(0.01),
+    temporal_tolerance_days: int = Form(0),
+    allow_previous_month: bool = Form(False),
+    allow_previous_year: bool = Form(False),
+) -> dict:
+    return await _procesar_archivos(
+        file=file,
+        pse_file=pse_file,
+        cruces_file=cruces_file,
+        adquirencias_file=adquirencias_file,
+        tolerance_days=tolerance_days,
+        tolerance_value=tolerance_value,
+        temporal_tolerance_days=temporal_tolerance_days,
+        allow_previous_month=allow_previous_month,
+        allow_previous_year=allow_previous_year,
+    )

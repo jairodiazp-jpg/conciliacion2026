@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { APP_VERSION } from "./generated/buildInfo";
 import ProcesoUnificadoSection from "./components/ProcesoUnificadoSection";
 
 const API_BASE = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/$/, "");
@@ -19,6 +20,10 @@ function App() {
   const [result, setResult] = useState(null);
 
   const filename = useMemo(() => selectedFile?.name || "Sin archivo seleccionado", [selectedFile]);
+
+  useEffect(() => {
+    document.title = `Conciliador Contable v${APP_VERSION}`;
+  }, []);
 
   const handleFileChange = (event) => {
     const file = event.target.files?.[0] || null;
@@ -1056,6 +1061,16 @@ function App() {
             <h3>Estado del sistema</h3>
             <p>
               Procesamiento en memoria, sin base de datos y listo para revisar logs, alertas y resultados.
+            </p>
+          </div>
+
+          <div className="sidebar-card">
+            <h3>Versión del despliegue</h3>
+            <p className="toolbar-badge" style={{ display: "inline-flex", margin: "0 0 10px" }}>
+              v{APP_VERSION}
+            </p>
+            <p>
+              Se actualiza automáticamente en cada build y despliegue para identificar la versión activa.
             </p>
           </div>
 

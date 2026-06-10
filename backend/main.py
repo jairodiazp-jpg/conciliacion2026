@@ -15,12 +15,17 @@ APP_VERSION = get_app_version()
 
 app = FastAPI(title="Conciliador Contable API", version=APP_VERSION)
 
-allowed_origins_raw = os.getenv(
-    "ALLOWED_ORIGINS",
-    "https://conciliador-contable.netlify.app,http://localhost:5173,http://127.0.0.1:5173",
-)
-allowed_origins = [origin.strip() for origin in allowed_origins_raw.split(",") if origin.strip()]
-allow_all_origins = "*" in allowed_origins
+default_allowed_origins = {
+    "https://conciliador-contable.netlify.app",
+    "https://conciliacion2026-web.onrender.com",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+}
+
+allowed_origins_raw = os.getenv("ALLOWED_ORIGINS", "")
+configured_allowed_origins = {origin.strip() for origin in allowed_origins_raw.split(",") if origin.strip()}
+allow_all_origins = "*" in configured_allowed_origins
+allowed_origins = sorted(default_allowed_origins | configured_allowed_origins)
 
 cors_kwargs = {
     "allow_methods": ["*"],

@@ -38,7 +38,7 @@ if allow_all_origins:
     cors_kwargs["allow_credentials"] = False
 else:
     cors_kwargs["allow_origins"] = allowed_origins
-    cors_kwargs["allow_credentials"] = True
+    cors_kwargs["allow_credentials"] = False
 
 app.add_middleware(CORSMiddleware, **cors_kwargs)
 

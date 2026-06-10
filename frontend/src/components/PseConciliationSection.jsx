@@ -67,7 +67,6 @@ function PseConciliationSection({ apiBase }) {
       const response = await fetch(`${apiBase}/pse/conciliar`, {
         method: "POST",
         body: formData,
-        credentials: "include",
       });
 
       const payload = await response.json();

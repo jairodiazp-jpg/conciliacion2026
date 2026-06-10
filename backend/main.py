@@ -18,6 +18,7 @@ app = FastAPI(title="Conciliador Contable API", version=APP_VERSION)
 default_allowed_origins = {
     "https://conciliador-contable.netlify.app",
     "https://conciliacion2026-web.onrender.com",
+    "https://jairodiazp-jpg.github.io",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
 }

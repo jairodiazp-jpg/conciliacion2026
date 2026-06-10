@@ -2,7 +2,25 @@ import { useEffect, useMemo, useState } from "react";
 import { APP_VERSION } from "./generated/buildInfo";
 import ProcesoUnificadoSection from "./components/ProcesoUnificadoSection";
 
-const API_BASE = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/$/, "");
+const PROD_API_BASE = "https://conciliacion2026-api.onrender.com";
+
+function resolveApiBase() {
+  const configuredApiBase = import.meta.env.VITE_API_URL?.trim();
+  if (configuredApiBase) {
+    return configuredApiBase.replace(/\/$/, "");
+  }
+
+  if (typeof window !== "undefined") {
+    const hostname = window.location.hostname;
+    if (hostname === "localhost" || hostname === "127.0.0.1") {
+      return "http://localhost:8000";
+    }
+  }
+
+  return PROD_API_BASE;
+}
+
+const API_BASE = resolveApiBase();
 
 function decodeBase64ToBlob(base64, mimeType) {
   const binary = atob(base64);

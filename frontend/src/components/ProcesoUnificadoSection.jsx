@@ -80,6 +80,7 @@ function ProcesoUnificadoSection({ apiBase }) {
       const response = await fetch(`${apiBase}/procesar`, {
         method: "POST",
         body: formData,
+        credentials: "include",
       });
 
       const payload = await response.json();

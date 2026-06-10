@@ -75,6 +75,7 @@ function App() {
       const response = await fetch(`${API_BASE}/procesar`, {
         method: "POST",
         body: formData,
+        credentials: "include",
       });
 
       const payload = await response.json();

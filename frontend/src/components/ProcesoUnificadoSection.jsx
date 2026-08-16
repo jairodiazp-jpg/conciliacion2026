@@ -28,6 +28,7 @@ function downloadBase64(fileContent, name) {
 function ProcesoUnificadoSection({ apiBase }) {
   const [pseFile, setPseFile] = useState(null);
   const [memoFile, setMemoFile] = useState(null);
+  const [queryInternoFile, setQueryInternoFile] = useState(null);
   const [adquirenciasFile, setAdquirenciasFile] = useState(null);
   const [dateTolerance, setDateTolerance] = useState(1);
   const [valueTolerance, setValueTolerance] = useState(0.01);
@@ -67,6 +68,9 @@ function ProcesoUnificadoSection({ apiBase }) {
       if (pseFile) {
         formData.append("pse_file", pseFile);
       }
+      if (queryInternoFile) {
+        formData.append("query_interno_file", queryInternoFile);
+      }
       if (adquirenciasFile) {
         formData.append("adquirencias_file", adquirenciasFile);
       }
@@ -100,6 +104,7 @@ function ProcesoUnificadoSection({ apiBase }) {
   const handleReset = () => {
     setPseFile(null);
     setMemoFile(null);
+    setQueryInternoFile(null);
     setAdquirenciasFile(null);
     setError("");
     setResult(null);
@@ -154,7 +159,21 @@ function ProcesoUnificadoSection({ apiBase }) {
           <span style={{ color: "var(--muted)", fontSize: 12, lineHeight: 1.4 }}>
             Sube aquí el archivo de conciliación contable o memorando de cruces.
           </span>
-        </div>        <div style={{ display: "grid", gap: 8 }}>
+        </div>
+        <div style={{ display: "grid", gap: 8 }}>
+          <input
+            className="input-file"
+            type="file"
+            accept=".xlsx"
+            aria-label="Archivo de Query Interno"
+            onChange={(event) => setQueryInternoFile(event.target.files?.[0] || null)}
+            disabled={loading}
+          />
+          <span style={{ color: "var(--muted)", fontSize: 12, lineHeight: 1.4 }}>
+            Sube aquí el archivo de Query Interno (opcional) - Segundo cruce interno.
+          </span>
+        </div>
+        <div style={{ display: "grid", gap: 8 }}>
           <input
             className="input-file"
             type="file"
@@ -166,7 +185,8 @@ function ProcesoUnificadoSection({ apiBase }) {
           <span style={{ color: "var(--muted)", fontSize: 12, lineHeight: 1.4 }}>
             Sube aquí el archivo de Adquirencias (opcional).
           </span>
-        </div>      </div>
+        </div>
+      </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
         <input

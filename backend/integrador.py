@@ -8,12 +8,13 @@ from io import BytesIO
 from typing import Any
 
 from conciliador import ConciliadorContable
+from query_interno import QueryInterno
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill
 from openpyxl.utils.datetime import from_excel
 from pse_conciliador import PseConciliador
+from adquirencias_conciliador import AdquirenciasConciliador
 from agrupacion_pse import conciliacion_por_agrupacion
-from procesador_adquirencias import ProcesadorAdquirencias
 from validacion_temporal import ValidacionTemporalConfig, evaluar_temporal
 
 
@@ -33,6 +34,7 @@ class ProcesadorIntegrado:
         contable_bytes: bytes | None = None,
         pse_bytes: bytes | None = None,
         cruces_bytes: bytes | None = None,
+        query_interno_bytes: bytes | None = None,
         adquirencias_bytes: bytes | None = None,
         date_tolerance_days: int = 1,
         value_tolerance: float = 0.01,
@@ -41,6 +43,7 @@ class ProcesadorIntegrado:
         self.contable_bytes = contable_bytes
         self.pse_bytes = pse_bytes
         self.cruces_bytes = cruces_bytes
+        self.query_interno_bytes = query_interno_bytes
         self.adquirencias_bytes = adquirencias_bytes
         self.date_tolerance_days = date_tolerance_days
         self.value_tolerance = value_tolerance
@@ -190,22 +193,7 @@ class ProcesadorIntegrado:
         return best
 
     def _parse_date_text(self, text: str) -> date | None:
-        cleaned = (text or "").strip()
-        if not cleaned:
-            return None
-        # normaliza separadores comunes
-        cleaned = cleaned.replace(".", "/")
-        # ISO primero
-        try:
-            return datetime.fromisoformat(cleaned).date()
-        except Exception:
-            pass
-        for fmt in ("%d/%m/%Y", "%d-%m-%Y", "%Y/%m/%d", "%Y-%m-%d"):
-            try:
-                return datetime.strptime(cleaned, fmt).date()
-            except Exception:
-                continue
-        return None
+        return parse_date(text)
 
     def _is_bancolombia_sheet(self, sheet_name: str) -> bool:
         name = (sheet_name or "").lower()
@@ -346,118 +334,13 @@ class ProcesadorIntegrado:
             logs.extend(pse_result.get("logs", []))
             alertas.extend(pse_result.get("alertas", []))
         if contable_result is None and pse_result is None:
-            # Permitir si se proporciona Adquirencias + Cruces
-            if self.adquirencias_bytes is not None and self.cruces_bytes is not None:
-                # Procesar Adquirencias cruzando con Cruces Contables
-                try:
-                    cruces_b64 = base64.b64encode(self.cruces_bytes).decode("utf-8")
-                    procesador_adq = ProcesadorAdquirencias(
-                        self.adquirencias_bytes,
-                        cruces_b64,
-                        value_tolerance=self.value_tolerance,
-                        date_tolerance_days=self.date_tolerance_days,
-                    )
-                    adq_result = procesador_adq.procesar()
-                    logs.extend(procesador_adq.logs)
-                    
-                    return {
-                        "mode": "adquirencias-cruces",
-                        "files": [
-                            {
-                                "name": "CRUCES_CONTABLES.xlsx",
-                                "file": adq_result["contable_file"],
-                            },
-                            {
-                                "name": "ADQUIRENCIAS_PROCESADAS.xlsx",
-                                "file": adq_result["adquirencias_file"],
-                            },
-                        ],
-                        "logs": logs,
-                        "alertas": alertas,
-                        "resumen": {
-                            "cruzados": len([l for l in logs if l.get("tipo") == "adquirencia_cruzada"]),
-                        },
-                    }
-                except Exception as e:
-                    alertas.append(f"Fallo en procesamiento de Adquirencias: {e}")
-                    return {
-                        "mode": "error",
-                        "files": [],
-                        "logs": logs,
-                        "alertas": alertas,
-                        "resumen": {},
-                    }
             raise ValueError("No se recibieron archivos para procesar")
-        if contable_result is not None and pse_result is None:
-            # Procesar Adquirencias si se proporciona (contable solo)
-            if self.adquirencias_bytes is not None:
-                try:
-                    # Si el memorando (contable) y el archivo de cruces son el mismo,
-                    # aplicar Adquirencias sobre el mismo workbook ya conciliado para
-                    # evitar generar archivos separados.
-                    same_memorando_and_cruces = (
-                        self.contable_bytes is not None
-                        and self.cruces_bytes is not None
-                        and self.contable_bytes == self.cruces_bytes
-                    )
-
-                    cruces_b64: str
-                    if same_memorando_and_cruces or self.cruces_bytes is None:
-                        cruces_b64 = contable_result["file"]
-                    else:
-                        cruces_b64 = base64.b64encode(self.cruces_bytes).decode("utf-8")
-                    
-                    procesador_adq = ProcesadorAdquirencias(
-                        self.adquirencias_bytes,
-                        cruces_b64,
-                        value_tolerance=self.value_tolerance,
-                        date_tolerance_days=self.date_tolerance_days,
-                    )
-                    adq_result = procesador_adq.procesar()
-
-                    # Si se trabajó sobre el mismo memorando, el resultado es el memorando final.
-                    # Siempre devolver el archivo de Adquirencias procesado para descarga.
-                    if same_memorando_and_cruces or self.cruces_bytes is None:
-                        contable_result["file"] = adq_result["contable_file"]
-                        cruces_procesado = None
-                        adquirencias_file_b64 = adq_result["adquirencias_file"]
-                    else:
-                        cruces_procesado = adq_result["contable_file"]
-                        adquirencias_file_b64 = adq_result["adquirencias_file"]
-
-                    logs.extend(procesador_adq.logs)
-
-                    files: list[dict[str, str]] = [
-                        {
-                            "name": "CONCILIACION_CONTABLE.xlsx",
-                            "file": contable_result["file"],
-                        }
-                    ]
-                    if cruces_procesado is not None:
-                        files.append(
-                            {
-                                "name": "CRUCES_CONTABLES.xlsx",
-                                "file": cruces_procesado,
-                            }
-                        )
-                    if adquirencias_file_b64 is not None:
-                        files.append(
-                            {
-                                "name": "ADQUIRENCIAS_PROCESADAS.xlsx",
-                                "file": adquirencias_file_b64,
-                            }
-                        )
-
-                    return {
-                        "mode": "contable-only",
-                        "contable": contable_result,
-                        "files": files,
-                        "logs": logs,
-                        "alertas": alertas,
-                        "resumen": contable_result.get("resumen", {}),
-                    }
-                except Exception as e:
-                    alertas.append(f"Fallo en procesamiento de Adquirencias: {e}")
+        if (
+            contable_result is not None
+            and pse_result is None
+            and self.adquirencias_bytes is None
+            and self.query_interno_bytes is None
+        ):
             return contable_result
         if contable_result is None and pse_result is not None:
             cruces_b64 = pse_result.get("secondary_file")
@@ -480,104 +363,133 @@ class ProcesadorIntegrado:
                 "alertas": alertas,
                 "resumen": pse_result.get("resumen", {}),
             }
-        contable_result["file"] = self._merge_pse_comments_into_contable(
-            contable_result["file"],
-            pse_result.get("dataset_cruces", []),
-        )
-        contable_result["file"] = self._annotate_pse_rows_in_contable(
-            contable_result["file"],
-            pse_result.get("dataset", []),
-        )
 
-        # Fase adicional: Conciliación por agrupación PSE (se ejecuta después de las reglas existentes)
-        try:
-            contable_result["file"] = self._apply_agrupacion_pse(
+        files: list[dict[str, str]] = []
+        resumen: dict[str, Any] = {}
+
+        if contable_result is not None and pse_result is not None:
+            contable_result["file"] = self._merge_pse_comments_into_contable(
+                contable_result["file"],
+                pse_result.get("dataset_cruces", []),
+            )
+            contable_result["file"] = self._annotate_pse_rows_in_contable(
                 contable_result["file"],
                 pse_result.get("dataset", []),
             )
-        except Exception as e:
-            alertas.append(f"Fallo en agrupación PSE: {e}")
 
-        # Fase adicional: Procesar Adquirencias si se proporciona
-        adquirencias_file_b64 = None
-        cruces_procesado_b64 = None
-        if self.adquirencias_bytes is not None:
+            # Fase adicional: Conciliación por agrupación PSE (se ejecuta después de las reglas existentes)
             try:
-                # Si el memorando (contable) y el archivo de cruces son el mismo,
-                # integrar Adquirencias en el mismo Excel conciliado.
-                same_memorando_and_cruces = (
-                    self.contable_bytes is not None
-                    and self.cruces_bytes is not None
-                    and self.contable_bytes == self.cruces_bytes
+                contable_result["file"] = self._apply_agrupacion_pse(
+                    contable_result["file"],
+                    pse_result.get("dataset", []),
                 )
+            except Exception as e:
+                alertas.append(f"Fallo en agrupación PSE: {e}")
 
-                cruces_o_contable_b64: str
-                if same_memorando_and_cruces or self.cruces_bytes is None:
-                    cruces_o_contable_b64 = contable_result["file"]
-                else:
-                    cruces_o_contable_b64 = base64.b64encode(self.cruces_bytes).decode("utf-8")
+            files = [
+                {
+                    "name": "CONCILIACION_CONTABLE.xlsx",
+                    "file": contable_result["file"],
+                },
+                {
+                    "name": pse_result.get("output_name", "PSE_CONCILIADO.xlsx"),
+                    "file": pse_result["file"],
+                },
+            ]
+
+            pse_resumen = pse_result.get("resumen", {}) or {}
+            contable_resumen = contable_result.get("resumen", {}) or {}
+            resumen = {
+                "cruzados": int(contable_resumen.get("cruzados", 0)) + int(pse_resumen.get("cruzados", 0)),
+                "posibles": int(contable_resumen.get("posibles", 0)) + int(pse_resumen.get("posibles", 0)),
+                "precision_estimada": round(
+                    (
+                        (
+                            int(contable_resumen.get("cruzados", 0))
+                            + int(pse_resumen.get("cruzados", 0))
+                        )
+                        /
+                        max(
+                            1,
+                            int(contable_resumen.get("total_movements", 0))
+                            + int(pse_resumen.get("total_movements", 0)),
+                        )
+                    ),
+                    2,
+                ),
+            }
+        elif contable_result is not None:
+            files = [
+                {
+                    "name": "CONCILIACION_CONTABLE.xlsx",
+                    "file": contable_result["file"],
+                },
+            ]
+            contable_resumen = contable_result.get("resumen", {}) or {}
+            resumen = {
+                "cruzados": int(contable_resumen.get("cruzados", 0)),
+                "posibles": int(contable_resumen.get("posibles", 0)),
+                "precision_estimada": round(
+                    int(contable_resumen.get("cruzados", 0))
+                    / max(1, int(contable_resumen.get("total_movements", 0))),
+                    2,
+                ),
+            }
+
+        # Fase adicional: Adquirencias
+        if self.adquirencias_bytes is not None and contable_result is not None:
+            try:
+                # El archivo contable_result["file"] es el CCS Memorando Definitivo
+                ccs_bytes = base64.b64decode(contable_result["file"])
+                adq_engine = AdquirenciasConciliador(self.adquirencias_bytes, ccs_bytes)
+                adq_res = adq_engine.procesar()
                 
-                procesador_adq = ProcesadorAdquirencias(
-                    self.adquirencias_bytes,
-                    cruces_o_contable_b64,
-                    value_tolerance=self.value_tolerance,
-                    date_tolerance_days=self.date_tolerance_days,
-                )
-                adq_result = procesador_adq.procesar()
-
-                # Si se integró en el memorando, no retornar archivos separados de cruces.
-                # Siempre devolver el archivo de Adquirencias procesado.
-                if same_memorando_and_cruces or self.cruces_bytes is None:
-                    contable_result["file"] = adq_result["contable_file"]
-                    cruces_procesado_b64 = None
-                    adquirencias_file_b64 = adq_result["adquirencias_file"]
-                else:
-                    cruces_procesado_b64 = adq_result["contable_file"]
-                    adquirencias_file_b64 = adq_result["adquirencias_file"]
-
-                logs.extend(procesador_adq.logs)
+                # Actualizar el archivo contable con la trazabilidad de adquirencias
+                contable_result["file"] = adq_res["ccs_file"]
+                
+                # Agregar el archivo de adquirencias procesado a la lista de archivos
+                files.append({
+                    "name": "ADQUIRENCIAS_CONCILIADO.xlsx",
+                    "file": adq_res["adquirencias_file"]
+                })
+                
+                # Actualizar resumen
+                resumen["cruzados"] += adq_res["resumen"]["cruzados"]
+                
+                # Actualizar archivos de salida (asegurar que CONCILIACION_CONTABLE tenga la última versión)
+                files = [f for f in files if f["name"] != "CONCILIACION_CONTABLE.xlsx"]
+                files.insert(0, {
+                    "name": "CONCILIACION_CONTABLE.xlsx",
+                    "file": contable_result["file"],
+                })
+                
             except Exception as e:
                 alertas.append(f"Fallo en procesamiento de Adquirencias: {e}")
 
-        files: list[dict[str, str]] = [
-            {
-                "name": "CONCILIACION_CONTABLE.xlsx",
-                "file": contable_result["file"],
-            },
-            {
-                "name": pse_result.get("output_name", "PSE_CONCILIADO.xlsx"),
-                "file": pse_result["file"],
-            },
-        ]
-        if cruces_procesado_b64 is not None:
-            files.append({
-                "name": "CRUCES_CONTABLES.xlsx",
-                "file": cruces_procesado_b64,
-            })
-        if adquirencias_file_b64 is not None:
-            files.append({
-                "name": "ADQUIRENCIAS_PROCESADAS.xlsx",
-                "file": adquirencias_file_b64,
-            })
-        resumen = {
-            "cruzados": int(contable_result.get("resumen", {}).get("cruzados", 0)) + int(pse_result.get("resumen", {}).get("cruzados", 0)),
-            "posibles": int(contable_result.get("resumen", {}).get("posibles", 0)) + int(pse_result.get("resumen", {}).get("posibles", 0)),
-            "precision_estimada": round(
-                (
-                    (
-                        int(contable_result.get("resumen", {}).get("cruzados", 0))
-                        + int(pse_result.get("resumen", {}).get("cruzados", 0))
-                    )
-                    /
-                    max(
-                        1,
-                        int(contable_result.get("resumen", {}).get("total_movements", 0))
-                        + int(pse_result.get("resumen", {}).get("total_movements", 0)),
-                    )
-                ),
-                2,
-            ),
-        }
+        # Fase adicional: Query Interno
+        if self.query_interno_bytes is not None:
+            try:
+                wb = load_workbook(BytesIO(self.query_interno_bytes), data_only=False)
+                q = QueryInterno(wb)
+                q.procesar()
+                out = BytesIO()
+                wb.save(out)
+                file_b64 = base64.b64encode(out.getvalue()).decode("utf-8")
+                
+                if contable_result is None:
+                    contable_result = {"file": file_b64, "resumen": {}}
+                else:
+                    contable_result["file"] = file_b64
+                
+                # Actualizar archivos de salida
+                files = [f for f in files if f["name"] != "CONCILIACION_CONTABLE.xlsx"]
+                files.insert(0, {
+                    "name": "CONCILIACION_CONTABLE.xlsx",
+                    "file": file_b64,
+                })
+            except Exception as e:
+                alertas.append(f"Fallo en procesamiento de Query Interno: {e}")
+
         return {
             "mode": "integrado",
             "contable": contable_result,

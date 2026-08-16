@@ -19,4 +19,4 @@ def get_app_version() -> str:
         if value:
             return value[:12]
 
-    return "local"
+    return "2.0"

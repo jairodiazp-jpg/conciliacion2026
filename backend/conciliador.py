@@ -20,6 +20,7 @@ from validacion_temporal import (
     evaluar_temporal,
     inferir_periodo_principal,
 )
+from utils import parse_date, parse_amount
 
 
 UPPER_MARKER = "sin registrar en libros"
@@ -245,21 +246,6 @@ class ConciliadorContable:
         for entry in related_entries:
             self._annotate_entry(entry, primary, tag)
 
-    def _parse_date(self, value: Any) -> date | None:
-        if isinstance(value, datetime):
-            return value.date()
-        if isinstance(value, date):
-            return value
-        if isinstance(value, str):
-            cleaned = value.strip()
-            if cleaned:
-                for fmt in ("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%Y/%m/%d", "%d/%m/%Y %H:%M:%S"):
-                    try:
-                        return datetime.strptime(cleaned, fmt).date()
-                    except Exception:
-                        continue
-        return None
-
     def _parse_number(self, value: Any) -> str | None:
         if value is None:
             return None
@@ -327,7 +313,7 @@ class ConciliadorContable:
 
                 for cell in row:
                     if parsed_date is None:
-                        parsed_date = self._parse_date(cell.value)
+                        parsed_date = parse_date(cell.value)
                     if parsed_number is None:
                         parsed_number = self._parse_number(cell.value)
 

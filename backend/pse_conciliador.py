@@ -21,6 +21,7 @@ from validacion_temporal import (
     evaluar_temporal,
     inferir_periodo_principal,
 )
+from utils import parse_date, parse_amount
 
 
 DATE_ALIASES = {
@@ -65,6 +66,7 @@ MAX_SUBSET_SIZE = 6
 PARTIAL_THRESHOLD_RATIO = 0.015
 
 HEADER_FILL = PatternFill(start_color="FFEAF2FF", end_color="FFEAF2FF", fill_type="solid")
+PINK_FILL = PatternFill(start_color="FFFFC0CB", end_color="FFFFC0CB", fill_type="solid")
 
 
 @dataclass
@@ -198,60 +200,20 @@ class PseConciliador:
         self.rango_operativo = rango_general
 
     def _parse_date(self, cell) -> date | None:
-        value = cell.value
-        if isinstance(value, datetime):
-            return value.date()
-        if isinstance(value, date):
-            return value
-        if isinstance(value, str):
-            cleaned = value.strip()
-            if cleaned:
-                for fmt in ("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%Y/%m/%d", "%d/%m/%Y %H:%M:%S"):
-                    try:
-                        return datetime.strptime(cleaned, fmt).date()
-                    except Exception:
-                        continue
+        parsed = parse_date(cell.value)
+        if parsed:
+            return parsed
         if getattr(cell, "is_date", False):
-            if isinstance(value, (int, float)):
+            if isinstance(cell.value, (int, float)):
                 try:
-                    parsed = from_excel(value)
-                    return parsed.date() if isinstance(parsed, datetime) else parsed
+                    parsed_excel = from_excel(cell.value)
+                    return parsed_excel.date() if isinstance(parsed_excel, datetime) else parsed_excel
                 except Exception:
                     return None
         return None
 
     def _parse_float(self, value: Any) -> float | None:
-        if value is None or isinstance(value, bool):
-            return None
-        if isinstance(value, (int, float)):
-            return float(value)
-        if isinstance(value, str):
-            cleaned = value.strip().replace("$", "").replace(" ", "")
-            if not cleaned:
-                return None
-            last_comma = cleaned.rfind(",")
-            last_dot = cleaned.rfind(".")
-
-            if last_comma != -1 and last_dot != -1:
-                if last_comma > last_dot:
-                    cleaned = cleaned.replace(".", "").replace(",", ".")
-                else:
-                    cleaned = cleaned.replace(",", "")
-            elif cleaned.count(",") == 1:
-                decimals = len(cleaned.split(",")[-1])
-                cleaned = cleaned.replace(",", ".") if decimals <= 2 else cleaned.replace(",", "")
-            elif cleaned.count(".") == 1:
-                decimals = len(cleaned.split(".")[-1])
-                cleaned = cleaned if decimals <= 2 else cleaned.replace(".", "")
-            elif cleaned.count(".") > 1:
-                cleaned = cleaned.replace(".", "")
-            else:
-                cleaned = cleaned.replace(",", "")
-            try:
-                return float(cleaned)
-            except ValueError:
-                return None
-        return None
+        return parse_amount(value)
 
     def _stringify(self, value: Any) -> str:
         if value is None:
@@ -641,7 +603,9 @@ class PseConciliador:
 
         for entry in matched_entries:
             entry.matched = True
+            self._color_movement(entry, PINK_FILL)
         pse_entry.matched = True
+        self._color_movement(pse_entry, PINK_FILL)
 
         account_label = self._build_account_string(matched_entries)
         values_associated = self._build_associated_values(matched_entries)
@@ -689,8 +653,10 @@ class PseConciliador:
         self.group_counter += 1
 
         cruce_entry.matched = True
+        self._color_movement(cruce_entry, PINK_FILL)
         for entry in pse_entries:
             entry.matched = True
+            self._color_movement(entry, PINK_FILL)
 
         total_pse = sum(abs(entry.value) for entry in pse_entries)
         pse_values = self._build_associated_values(pse_entries)
@@ -804,6 +770,14 @@ class PseConciliador:
         target_cell.alignment = copy(source_cell.alignment)
         target_cell.number_format = source_cell.number_format
         target_cell.protection = copy(source_cell.protection)
+
+    def _color_movement(self, movement: Movimiento, fill: PatternFill) -> None:
+        wb = self.pse_workbook if movement.sheet_name in self.pse_schemas else self.cruces_workbook
+        sheet = wb[movement.sheet_name]
+        schema = self.pse_schemas.get(movement.sheet_name) or self.cruces_schemas.get(movement.sheet_name)
+        if schema:
+            cell = sheet.cell(row=movement.row, column=schema.value_col)
+            cell.fill = fill
 
     def _construir_resumen(self, match_results: list[MatchResult], pse_entries: list[Movimiento]) -> dict[str, Any]:
         conciliados = len([result for result in match_results if result.state.startswith("Conciliado")])

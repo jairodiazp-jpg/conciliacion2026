@@ -26,15 +26,7 @@ function buildVersion() {
 
   const commitCount = runCommand("git rev-list --count HEAD");
 
-  if (commitCount && commitHash) {
-    return `1.0.${commitCount}-${commitHash.slice(0, 7)}`;
-  }
-
-  if (commitHash) {
-    return `1.0.0-${commitHash.slice(0, 7)}`;
-  }
-
-  return "1.0.0-dev";
+  return "2.0";
 }
 
 const version = buildVersion();

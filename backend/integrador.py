@@ -323,6 +323,13 @@ class ProcesadorIntegrado:
             ).procesar()
             logs.extend(contable_result.get("logs", []))
             alertas.extend(contable_result.get("alertas", []))
+        elif self.cruces_bytes is not None and (self.adquirencias_bytes is not None or self.query_interno_bytes is not None):
+            contable_result = ConciliadorContable(
+                self.cruces_bytes,
+                temporal_config=self.temporal_config,
+            ).procesar()
+            logs.extend(contable_result.get("logs", []))
+            alertas.extend(contable_result.get("alertas", []))
         if self.pse_bytes is not None and self.cruces_bytes is not None:
             pse_result = PseConciliador(
                 self.pse_bytes,
@@ -466,27 +473,55 @@ class ProcesadorIntegrado:
             except Exception as e:
                 alertas.append(f"Fallo en procesamiento de Adquirencias: {e}")
 
-        # Fase adicional: Query Interno
-        if self.query_interno_bytes is not None:
+        # Fase adicional: Query Interno (solo después de la lógica existente)
+        if self.query_interno_bytes is not None and contable_result is not None:
             try:
-                wb = load_workbook(BytesIO(self.query_interno_bytes), data_only=False)
-                q = QueryInterno(wb)
+                ccs_workbook = load_workbook(BytesIO(base64.b64decode(contable_result["file"])), data_only=False)
+                query_workbook = load_workbook(BytesIO(self.query_interno_bytes), data_only=False)
+                q = QueryInterno(
+                    ccs_workbook,
+                    query_workbook,
+                    date_tolerance_days=self.date_tolerance_days,
+                    value_tolerance=self.value_tolerance,
+                )
                 q.procesar()
                 out = BytesIO()
-                wb.save(out)
+                ccs_workbook.save(out)
                 file_b64 = base64.b64encode(out.getvalue()).decode("utf-8")
-                
-                if contable_result is None:
-                    contable_result = {"file": file_b64, "resumen": {}}
-                else:
-                    contable_result["file"] = file_b64
-                
-                # Actualizar archivos de salida
+                contable_result["file"] = file_b64
                 files = [f for f in files if f["name"] != "CONCILIACION_CONTABLE.xlsx"]
                 files.insert(0, {
                     "name": "CONCILIACION_CONTABLE.xlsx",
                     "file": file_b64,
                 })
+                query_final_b64 = q.export_final_workbook()
+                files.append({
+                    "name": "QUERY_APP_JULIO_CONCILIADO_TRAZABILIDAD.xlsx",
+                    "file": query_final_b64,
+                })
+                resumen.update({
+                    "query_total": q.summary.get("total_query", 0),
+                    "query_cruzados": q.summary.get("cruzados", 0),
+                    "query_validar_valor_duplicado": q.summary.get("validar_valor_duplicado", 0),
+                    "query_pendientes": q.summary.get("pendientes", 0),
+                })
+                prior_resumen = contable_result.get("resumen") or {}
+                contable_result["resumen"] = {
+                    **prior_resumen,
+                    "query_total": q.summary.get("total_query", 0),
+                    "query_cruzados": q.summary.get("cruzados", 0),
+                    "query_validar_valor_duplicado": q.summary.get("validar_valor_duplicado", 0),
+                    "query_pendientes": q.summary.get("pendientes", 0),
+                    "cruzados": int(prior_resumen.get("cruzados", 0)) + int(q.summary.get("cruzados", 0)),
+                    "pendientes": int(prior_resumen.get("pendientes", 0)) + int(q.summary.get("pendientes", 0)),
+                }
+                if int(q.summary.get("cruzados", 0)) > 0:
+                    contable_result["alertas"] = [
+                        item for item in contable_result.get("alertas", []) if "No se detectaron cruces concluyentes." not in item
+                    ]
+                    alertas[:] = [
+                        item for item in alertas if "No se detectaron cruces concluyentes." not in item
+                    ]
             except Exception as e:
                 alertas.append(f"Fallo en procesamiento de Query Interno: {e}")
 

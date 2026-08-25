@@ -56,6 +56,7 @@ function ProcesoUnificadoSection({ apiBase, apiKey }) {
 
   const fileInputStyle = (hasFile) => ({
     width: "100%",
+    minHeight: 56,
     border: hasFile ? "1px solid #22c55e" : "1px solid rgba(37, 99, 235, 0.14)",
     background: hasFile ? "rgba(34, 197, 94, 0.12)" : "#fff",
     borderRadius: 16,
@@ -64,6 +65,8 @@ function ProcesoUnificadoSection({ apiBase, apiKey }) {
     fontSize: 14,
     boxShadow: hasFile ? "0 0 0 3px rgba(34, 197, 94, 0.12)" : "none",
     transition: "all 0.2s ease",
+    display: "block",
+    boxSizing: "border-box",
   });
 
   const handleProcess = async () => {
@@ -129,25 +132,21 @@ function ProcesoUnificadoSection({ apiBase, apiKey }) {
   return (
     <section className="panel panel-pad" style={{ display: "grid", gap: 16 }}>
       <div className="brand-row" style={{ marginBottom: 0 }}>
-        <span className="brand-pill">Proceso unificado</span>
-        <span style={{ color: "var(--muted)", fontSize: 13 }}>
-          Un solo envío para conciliación PSE y memorando de cruces
-        </span>
+        <span className="brand-pill">Automatización de pagos</span>
       </div>
 
       <div>
-        <p className="eyebrow">Flujo único</p>
+        <p className="eyebrow">Carga de archivos</p>
         <h2 className="title" style={{ maxWidth: "18ch", fontSize: "clamp(1.7rem, 3vw, 2.6rem)" }}>
-          Dos archivos, un solo cruce
+          Automatización de pagos
         </h2>
         <p className="subtitle" style={{ maxWidth: "74ch" }}>
-          Carga el archivo PSE y el memorando de conciliación contable. El backend cruza los valores exactos entre
-          ambos archivos y devuelve el resultado conciliado sin alterar el formato original.
+          Carga los archivos necesarios para el proceso de conciliación y consulta de cruces.
         </p>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
-        <div style={{ display: "grid", gap: 8 }}>
+        <div style={{ display: "grid", gap: 8, height: "100%" }}>
           <input
             className="input-file"
             type="file"
@@ -161,7 +160,7 @@ function ProcesoUnificadoSection({ apiBase, apiKey }) {
             Sube aquí el archivo PSE.
           </span>
         </div>
-        <div style={{ display: "grid", gap: 8 }}>
+        <div style={{ display: "grid", gap: 8, height: "100%" }}>
           <input
             className="input-file"
             type="file"
@@ -175,7 +174,7 @@ function ProcesoUnificadoSection({ apiBase, apiKey }) {
             Sube aquí el archivo de conciliación contable o memorando de cruces.
           </span>
         </div>
-        <div style={{ display: "grid", gap: 8 }}>
+        <div style={{ display: "grid", gap: 8, height: "100%" }}>
           <input
             className="input-file"
             type="file"
@@ -189,7 +188,7 @@ function ProcesoUnificadoSection({ apiBase, apiKey }) {
             Sube aquí el archivo de Query Interno (opcional) - Segundo cruce interno.
           </span>
         </div>
-        <div style={{ display: "grid", gap: 8 }}>
+        <div style={{ display: "grid", gap: 8, height: "100%" }}>
           <input
             className="input-file"
             type="file"

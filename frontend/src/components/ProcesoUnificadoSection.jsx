@@ -148,7 +148,10 @@ function ProcesoUnificadoSection({ apiBase, apiKey }) {
       <div className="upload-card">
         <div className="upload-header">
           <div style={{ width: 44, height: 44, borderRadius: 10, background: 'linear-gradient(180deg, rgba(37,99,235,0.08), rgba(79,70,229,0.04))', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent)' }}>
-            📁
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+              <path d="M12 3v8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M8 7l4-4 4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
           </div>
           <div>
             <div style={{ fontWeight: 700 }}>Carga de archivos</div>
@@ -161,13 +164,24 @@ function ProcesoUnificadoSection({ apiBase, apiKey }) {
           <div className="upload-tile-wrapper">
             <div className="upload-tile">
               <div className="upload-tile-inner">
-                <div className="upload-icon">⬆️</div>
+                <div className="upload-icon">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+                    <path d="M8 12l4-4 4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M12 16V8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                  </svg>
+                </div>
                 <div className="upload-label">PSE</div>
                 <div className="upload-sub">Archivo requerido</div>
                 <input className="upload-input" type="file" accept=".xlsx" aria-label="Archivo PSE" onChange={(event) => setPseFile(event.target.files?.[0] || null)} disabled={loading} />
               </div>
               <div className="ref-row">
-                <div style={{ width: 18, height: 18, borderRadius: 6, background: 'rgba(37,99,235,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent)' }}>i</div>
+                <div style={{ width: 18, height: 18, borderRadius: 6, background: 'rgba(37,99,235,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent)' }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.2" />
+                    <path d="M12 8v4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                    <circle cx="12" cy="16.4" r="0.8" fill="currentColor" />
+                  </svg>
+                </div>
                 <div style={{ color: 'var(--muted)', fontSize: 13, minWidth: 120 }}>Valor de referencia</div>
                 <input className="small-input" type="number" min="0" step="1" value={dateTolerance} onChange={(event) => setDateTolerance(Number(event.target.value || 0))} disabled={loading} />
               </div>
@@ -178,13 +192,24 @@ function ProcesoUnificadoSection({ apiBase, apiKey }) {
           <div className="upload-tile-wrapper">
             <div className="upload-tile">
               <div className="upload-tile-inner">
-                <div className="upload-icon">⬆️</div>
+                <div className="upload-icon">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+                    <path d="M8 12l4-4 4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M12 16V8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                  </svg>
+                </div>
                 <div className="upload-label">Conciliación</div>
                 <div className="upload-sub">Archivo requerido</div>
                 <input className="upload-input" type="file" accept=".xlsx" aria-label="Archivo de conciliación contable" onChange={(event) => setMemoFile(event.target.files?.[0] || null)} disabled={loading} />
               </div>
               <div className="ref-row">
-                <div style={{ width: 18, height: 18, borderRadius: 6, background: 'rgba(37,99,235,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent)' }}>i</div>
+                <div style={{ width: 18, height: 18, borderRadius: 6, background: 'rgba(37,99,235,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent)' }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.2" />
+                    <path d="M12 8v4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                    <circle cx="12" cy="16.4" r="0.8" fill="currentColor" />
+                  </svg>
+                </div>
                 <div style={{ color: 'var(--muted)', fontSize: 13, minWidth: 120 }}>Valor de referencia</div>
                 <input className="small-input" type="text" value={""} onChange={() => {}} disabled={loading} />
               </div>
@@ -195,13 +220,24 @@ function ProcesoUnificadoSection({ apiBase, apiKey }) {
           <div className="upload-tile-wrapper">
             <div className="upload-tile">
               <div className="upload-tile-inner">
-                <div className="upload-icon">⬆️</div>
+                <div className="upload-icon">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+                    <path d="M8 12l4-4 4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M12 16V8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                  </svg>
+                </div>
                 <div className="upload-label">Query Interno</div>
                 <div className="upload-sub">Opcional</div>
                 <input className="upload-input" type="file" accept=".xlsx" aria-label="Archivo de Query Interno" onChange={(event) => setQueryInternoFile(event.target.files?.[0] || null)} disabled={loading} />
               </div>
               <div className="ref-row">
-                <div style={{ width: 18, height: 18, borderRadius: 6, background: 'rgba(37,99,235,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent)' }}>i</div>
+                <div style={{ width: 18, height: 18, borderRadius: 6, background: 'rgba(37,99,235,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent)' }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.2" />
+                    <path d="M12 8v4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                    <circle cx="12" cy="16.4" r="0.8" fill="currentColor" />
+                  </svg>
+                </div>
                 <div style={{ color: 'var(--muted)', fontSize: 13, minWidth: 120 }}>Valor de referencia</div>
                 <input className="small-input" type="number" min="0" step="0.01" value={valueTolerance} onChange={(event) => setValueTolerance(Number(event.target.value || 0))} disabled={loading} />
               </div>
@@ -212,13 +248,24 @@ function ProcesoUnificadoSection({ apiBase, apiKey }) {
           <div className="upload-tile-wrapper">
             <div className="upload-tile">
               <div className="upload-tile-inner">
-                <div className="upload-icon">⬆️</div>
+                <div className="upload-icon">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+                    <path d="M8 12l4-4 4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M12 16V8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                  </svg>
+                </div>
                 <div className="upload-label">Adquirencias</div>
                 <div className="upload-sub">Opcional</div>
                 <input className="upload-input" type="file" accept=".xlsx" aria-label="Archivo de Adquirencias" onChange={(event) => setAdquirenciasFile(event.target.files?.[0] || null)} disabled={loading} />
               </div>
               <div className="ref-row">
-                <div style={{ width: 18, height: 18, borderRadius: 6, background: 'rgba(37,99,235,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent)' }}>i</div>
+                <div style={{ width: 18, height: 18, borderRadius: 6, background: 'rgba(37,99,235,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent)' }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.2" />
+                    <path d="M12 8v4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                    <circle cx="12" cy="16.4" r="0.8" fill="currentColor" />
+                  </svg>
+                </div>
                 <div style={{ color: 'var(--muted)', fontSize: 13, minWidth: 120 }}>Valor de referencia</div>
                 <input className="small-input" type="text" value={""} onChange={() => {}} disabled={loading} />
               </div>

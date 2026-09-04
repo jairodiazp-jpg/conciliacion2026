@@ -190,6 +190,137 @@ function App() {
           overflow: hidden;
         }
 
+        /* Upload card styles to match design */
+        .upload-card {
+          background: var(--panel-strong);
+          border-radius: 18px;
+          padding: 26px;
+          box-shadow: 0 12px 30px rgba(15,23,42,0.06);
+          border: 1px solid rgba(15,23,42,0.03);
+        }
+
+        .upload-header {
+          display: flex;
+          gap: 12px;
+          align-items: center;
+          margin-bottom: 16px;
+        }
+
+        .upload-title {
+          font-size: 1.15rem;
+          font-weight: 700;
+        }
+
+        .upload-grid {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 18px;
+          margin-bottom: 18px;
+        }
+
+        .upload-tile {
+          background: transparent;
+          border-radius: 14px;
+          padding: 18px;
+          min-height: 220px;
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between;
+          border: 1px dashed rgba(37,99,235,0.12);
+        }
+
+        .upload-tile-inner {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 12px;
+        }
+
+        .upload-icon {
+          width: 64px;
+          height: 64px;
+          background: linear-gradient(180deg, rgba(79,70,229,0.06), rgba(37,99,235,0.04));
+          border-radius: 12px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: var(--accent);
+          font-size: 28px;
+        }
+
+        .upload-label {
+          font-weight: 700;
+        }
+
+        .upload-sub {
+          font-size: 0.82rem;
+          color: var(--muted);
+        }
+
+        .upload-input {
+          position: absolute;
+          inset: 0;
+          opacity: 0;
+          width: 100%;
+          height: 100%;
+          cursor: pointer;
+        }
+
+        .upload-tile-wrapper {
+          position: relative;
+        }
+
+        .ref-row {
+          display: flex;
+          gap: 12px;
+          align-items: center;
+        }
+
+        .small-input {
+          border: 1px solid rgba(37, 99, 235, 0.14);
+          background: #fff;
+          border-radius: 10px;
+          padding: 10px 12px;
+          width: 100%;
+          font-size: 14px;
+        }
+
+        .actions-row {
+          display: flex;
+          gap: 12px;
+          align-items: center;
+          justify-content: space-between;
+        }
+
+        .actions-left { display:flex; gap:12px; align-items:center }
+
+        .btn-primary {
+          background: linear-gradient(180deg, #2747a9, #1e3a8a);
+          color: white;
+          padding: 12px 20px;
+          border-radius: 12px;
+          border: none;
+          box-shadow: 0 8px 20px rgba(37,99,235,0.2);
+          font-weight: 700;
+        }
+
+        .btn-secondary {
+          background: white;
+          border: 1px solid rgba(15,23,42,0.06);
+          color: var(--muted-strong);
+          padding: 10px 16px;
+          border-radius: 12px;
+          font-weight: 600;
+        }
+
+        .btn-ghost-right {
+          background: white;
+          border: 1px solid rgba(15,23,42,0.06);
+          padding: 10px 16px;
+          border-radius: 12px;
+          color: var(--muted-strong);
+        }
+
         .panel-pad {
           padding: 22px;
         }

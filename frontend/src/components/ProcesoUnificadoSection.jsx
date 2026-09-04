@@ -137,7 +137,7 @@ function ProcesoUnificadoSection({ apiBase, apiKey }) {
 
       <div>
         <p className="eyebrow">Carga de archivos</p>
-        <h2 className="title" style={{ maxWidth: "18ch", fontSize: "clamp(1.7rem, 3vw, 2.6rem)" }}>
+        <h2 className="title" style={{ maxWidth: "48ch", fontSize: "clamp(1.7rem, 3vw, 2.6rem)" }}>
           Automatización de pagos
         </h2>
         <p className="subtitle" style={{ maxWidth: "74ch" }}>
@@ -145,98 +145,96 @@ function ProcesoUnificadoSection({ apiBase, apiKey }) {
         </p>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
-        <div style={{ display: "grid", gap: 8, height: "100%" }}>
-          <input
-            className="input-file"
-            type="file"
-            accept=".xlsx"
-            aria-label="Archivo PSE"
-            onChange={(event) => setPseFile(event.target.files?.[0] || null)}
-            disabled={loading}
-            style={fileInputStyle(Boolean(pseFile))}
-          />
-          <span style={{ color: "var(--muted)", fontSize: 12, lineHeight: 1.4 }}>
-            Sube aquí el archivo PSE.
-          </span>
+      <div className="upload-card">
+        <div className="upload-header">
+          <div style={{ width: 44, height: 44, borderRadius: 10, background: 'linear-gradient(180deg, rgba(37,99,235,0.08), rgba(79,70,229,0.04))', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent)' }}>
+            📁
+          </div>
+          <div>
+            <div style={{ fontWeight: 700 }}>Carga de archivos</div>
+            <div style={{ fontSize: 12, color: 'var(--muted)' }}>Selecciona los archivos para iniciar el proceso</div>
+          </div>
         </div>
-        <div style={{ display: "grid", gap: 8, height: "100%" }}>
-          <input
-            className="input-file"
-            type="file"
-            accept=".xlsx"
-            aria-label="Archivo de conciliación contable"
-            onChange={(event) => setMemoFile(event.target.files?.[0] || null)}
-            disabled={loading}
-            style={fileInputStyle(Boolean(memoFile))}
-          />
-          <span style={{ color: "var(--muted)", fontSize: 12, lineHeight: 1.4 }}>
-            Sube aquí el archivo de conciliación contable o memorando de cruces.
-          </span>
-        </div>
-        <div style={{ display: "grid", gap: 8, height: "100%" }}>
-          <input
-            className="input-file"
-            type="file"
-            accept=".xlsx"
-            aria-label="Archivo de Query Interno"
-            onChange={(event) => setQueryInternoFile(event.target.files?.[0] || null)}
-            disabled={loading}
-            style={fileInputStyle(Boolean(queryInternoFile))}
-          />
-          <span style={{ color: "var(--muted)", fontSize: 12, lineHeight: 1.4 }}>
-            Sube aquí el archivo de Query Interno (opcional) - Segundo cruce interno.
-          </span>
-        </div>
-        <div style={{ display: "grid", gap: 8, height: "100%" }}>
-          <input
-            className="input-file"
-            type="file"
-            accept=".xlsx"
-            aria-label="Archivo de Adquirencias"
-            onChange={(event) => setAdquirenciasFile(event.target.files?.[0] || null)}
-            disabled={loading}
-            style={fileInputStyle(Boolean(adquirenciasFile))}
-          />
-          <span style={{ color: "var(--muted)", fontSize: 12, lineHeight: 1.4 }}>
-            Sube aquí el archivo de Adquirencias (opcional).
-          </span>
-        </div>
-      </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
-        <input
-          type="number"
-          min="0"
-          step="1"
-          value={dateTolerance}
-          onChange={(event) => setDateTolerance(Number(event.target.value || 0))}
-          placeholder="Tolerancia en días"
-          style={{ width: "100%", border: "1px solid rgba(37, 99, 235, 0.14)", background: "#fff", borderRadius: 16, padding: 14, color: "var(--text)", fontSize: 14 }}
-          disabled={loading}
-        />
-        <input
-          type="number"
-          min="0"
-          step="0.01"
-          value={valueTolerance}
-          onChange={(event) => setValueTolerance(Number(event.target.value || 0))}
-          placeholder="Tolerancia en valor"
-          style={{ width: "100%", border: "1px solid rgba(37, 99, 235, 0.14)", background: "#fff", borderRadius: 16, padding: 14, color: "var(--text)", fontSize: 14 }}
-          disabled={loading}
-        />
-      </div>
+        <div className="upload-grid">
+          {/* PSE */}
+          <div className="upload-tile-wrapper">
+            <div className="upload-tile">
+              <div className="upload-tile-inner">
+                <div className="upload-icon">⬆️</div>
+                <div className="upload-label">PSE</div>
+                <div className="upload-sub">Archivo requerido</div>
+                <input className="upload-input" type="file" accept=".xlsx" aria-label="Archivo PSE" onChange={(event) => setPseFile(event.target.files?.[0] || null)} disabled={loading} />
+              </div>
+              <div className="ref-row">
+                <div style={{ width: 18, height: 18, borderRadius: 6, background: 'rgba(37,99,235,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent)' }}>i</div>
+                <div style={{ color: 'var(--muted)', fontSize: 13, minWidth: 120 }}>Valor de referencia</div>
+                <input className="small-input" type="number" min="0" step="1" value={dateTolerance} onChange={(event) => setDateTolerance(Number(event.target.value || 0))} disabled={loading} />
+              </div>
+            </div>
+          </div>
 
-      <div className="upload-actions">
-        <button className="btn btn-primary" onClick={handleProcess} disabled={loading}>
-          {loading ? "Procesando..." : "Procesar todo"}
-        </button>
-        <button className="btn btn-secondary" onClick={() => downloadResult(result)} disabled={!result}>
-          Descargar resultados
-        </button>
-        <button className="btn btn-ghost" onClick={handleReset} disabled={loading}>
-          Limpiar
-        </button>
+          {/* Conciliación */}
+          <div className="upload-tile-wrapper">
+            <div className="upload-tile">
+              <div className="upload-tile-inner">
+                <div className="upload-icon">⬆️</div>
+                <div className="upload-label">Conciliación</div>
+                <div className="upload-sub">Archivo requerido</div>
+                <input className="upload-input" type="file" accept=".xlsx" aria-label="Archivo de conciliación contable" onChange={(event) => setMemoFile(event.target.files?.[0] || null)} disabled={loading} />
+              </div>
+              <div className="ref-row">
+                <div style={{ width: 18, height: 18, borderRadius: 6, background: 'rgba(37,99,235,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent)' }}>i</div>
+                <div style={{ color: 'var(--muted)', fontSize: 13, minWidth: 120 }}>Valor de referencia</div>
+                <input className="small-input" type="text" value={""} onChange={() => {}} disabled={loading} />
+              </div>
+            </div>
+          </div>
+
+          {/* Query Interno */}
+          <div className="upload-tile-wrapper">
+            <div className="upload-tile">
+              <div className="upload-tile-inner">
+                <div className="upload-icon">⬆️</div>
+                <div className="upload-label">Query Interno</div>
+                <div className="upload-sub">Opcional</div>
+                <input className="upload-input" type="file" accept=".xlsx" aria-label="Archivo de Query Interno" onChange={(event) => setQueryInternoFile(event.target.files?.[0] || null)} disabled={loading} />
+              </div>
+              <div className="ref-row">
+                <div style={{ width: 18, height: 18, borderRadius: 6, background: 'rgba(37,99,235,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent)' }}>i</div>
+                <div style={{ color: 'var(--muted)', fontSize: 13, minWidth: 120 }}>Valor de referencia</div>
+                <input className="small-input" type="number" min="0" step="0.01" value={valueTolerance} onChange={(event) => setValueTolerance(Number(event.target.value || 0))} disabled={loading} />
+              </div>
+            </div>
+          </div>
+
+          {/* Adquirencias */}
+          <div className="upload-tile-wrapper">
+            <div className="upload-tile">
+              <div className="upload-tile-inner">
+                <div className="upload-icon">⬆️</div>
+                <div className="upload-label">Adquirencias</div>
+                <div className="upload-sub">Opcional</div>
+                <input className="upload-input" type="file" accept=".xlsx" aria-label="Archivo de Adquirencias" onChange={(event) => setAdquirenciasFile(event.target.files?.[0] || null)} disabled={loading} />
+              </div>
+              <div className="ref-row">
+                <div style={{ width: 18, height: 18, borderRadius: 6, background: 'rgba(37,99,235,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent)' }}>i</div>
+                <div style={{ color: 'var(--muted)', fontSize: 13, minWidth: 120 }}>Valor de referencia</div>
+                <input className="small-input" type="text" value={""} onChange={() => {}} disabled={loading} />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="actions-row">
+          <div className="actions-left">
+            <button className="btn-primary" onClick={handleProcess} disabled={loading}>{loading ? 'Procesando...' : 'Procesar archivos'}</button>
+            <button className="btn-secondary" onClick={() => downloadResult(result)} disabled={!result}>Descargar resultados</button>
+          </div>
+          <div>
+            <button className="btn-ghost-right" onClick={handleReset} disabled={loading}>Limpiar</button>
+          </div>
+        </div>
       </div>
 
       {error && <p className="error">{error}</p>}

@@ -394,16 +394,12 @@ class QueryInterno:
         self._set_status(ccs_entry, "CRUZADO")
         self._append_annotation(ccs_entry["sheet"].cell(row=ccs_entry["row"], column=ccs_entry["comment_col"]), trace_message)
         self._append_annotation(query_entry["sheet"].cell(row=query_entry["row"], column=query_entry["comment_col"]), trace_message)
-        # Ensure the NO_DOCUMENTO_SAP (Documento SAP) is explicitly visible in the comment/observation
-        sap_value = ccs_entry.get("documento") or "N/A"
-        self._append_annotation(query_entry["sheet"].cell(row=query_entry["row"], column=query_entry["comment_col"]), f"NO_DOCUMENTO_SAP: {sap_value}")
         for cell in ccs_entry["sheet"][ccs_entry["row"]]:
             cell.fill = ZAPOTE_FILL
         for cell in query_entry["sheet"][query_entry["row"]]:
             cell.fill = ZAPOTE_FILL
         trace_map = self._ensure_trace_columns(query_entry["sheet"])
         timestamp = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-        observacion_text = f"Cruce único por cuenta + fecha + valor + SAP | NO_DOCUMENTO_SAP: {sap_value}"
         record = {
             "fila_query": query_entry["row"],
             "banco_query": query_entry.get("banco") or query_entry["cuenta"],
@@ -418,7 +414,7 @@ class QueryInterno:
             "estado": "CRUZADO",
             "resultado": "MATCH",
             "fecha_hora": timestamp,
-            "observacion": observacion_text,
+            "observacion": "Cruce único por cuenta + fecha + valor + SAP",
         }
         self.trace_rows.append(record)
         self._set_query_trace(query_entry["sheet"], query_entry["row"], trace_map, {
@@ -434,7 +430,7 @@ class QueryInterno:
             "no_documento_sap": ccs_entry["documento"] or "N/A",
             "fecha_hora_cruce": timestamp,
             "resultado_cruce": "MATCH",
-            "observacion_cruce": observacion_text,
+            "observacion_cruce": "Cruce único por cuenta + fecha + valor + SAP",
         })
 
     def _mark_pending(self, query_entry: Dict[str, Any], reason: str, result: str = "SIN MATCH") -> None:

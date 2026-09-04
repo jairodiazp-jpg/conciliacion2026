@@ -162,7 +162,7 @@ function ProcesoUnificadoSection({ apiBase, apiKey }) {
         <div className="upload-grid">
           {/* PSE */}
           <div className="upload-tile-wrapper">
-            <div className="upload-tile">
+            <div className={`upload-tile ${pseFile ? 'loaded' : ''}`}>
               <div className="upload-tile-inner">
                 <div className="upload-icon">
                   <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
@@ -172,6 +172,7 @@ function ProcesoUnificadoSection({ apiBase, apiKey }) {
                 </div>
                 <div className="upload-label">PSE</div>
                 <div className="upload-sub">Archivo requerido</div>
+                {pseFile && <div className="upload-filename">{pseFile.name}</div>}
                 <input className="upload-input" type="file" accept=".xlsx" aria-label="Archivo PSE" onChange={(event) => setPseFile(event.target.files?.[0] || null)} disabled={loading} />
               </div>
               <div className="ref-row">
@@ -190,7 +191,7 @@ function ProcesoUnificadoSection({ apiBase, apiKey }) {
 
           {/* Conciliación */}
           <div className="upload-tile-wrapper">
-            <div className="upload-tile">
+            <div className={`upload-tile ${memoFile ? 'loaded' : ''}`}>
               <div className="upload-tile-inner">
                 <div className="upload-icon">
                   <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
@@ -200,6 +201,7 @@ function ProcesoUnificadoSection({ apiBase, apiKey }) {
                 </div>
                 <div className="upload-label">Conciliación</div>
                 <div className="upload-sub">Archivo requerido</div>
+                {memoFile && <div className="upload-filename">{memoFile.name}</div>}
                 <input className="upload-input" type="file" accept=".xlsx" aria-label="Archivo de conciliación contable" onChange={(event) => setMemoFile(event.target.files?.[0] || null)} disabled={loading} />
               </div>
               <div className="ref-row">
@@ -218,7 +220,7 @@ function ProcesoUnificadoSection({ apiBase, apiKey }) {
 
           {/* Query Interno */}
           <div className="upload-tile-wrapper">
-            <div className="upload-tile">
+            <div className={`upload-tile ${queryInternoFile ? 'loaded' : ''}`}>
               <div className="upload-tile-inner">
                 <div className="upload-icon">
                   <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
@@ -228,6 +230,7 @@ function ProcesoUnificadoSection({ apiBase, apiKey }) {
                 </div>
                 <div className="upload-label">Query Interno</div>
                 <div className="upload-sub">Opcional</div>
+                {queryInternoFile && <div className="upload-filename">{queryInternoFile.name}</div>}
                 <input className="upload-input" type="file" accept=".xlsx" aria-label="Archivo de Query Interno" onChange={(event) => setQueryInternoFile(event.target.files?.[0] || null)} disabled={loading} />
               </div>
               <div className="ref-row">
@@ -246,7 +249,7 @@ function ProcesoUnificadoSection({ apiBase, apiKey }) {
 
           {/* Adquirencias */}
           <div className="upload-tile-wrapper">
-            <div className="upload-tile">
+            <div className={`upload-tile ${adquirenciasFile ? 'loaded' : ''}`}>
               <div className="upload-tile-inner">
                 <div className="upload-icon">
                   <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
@@ -256,6 +259,7 @@ function ProcesoUnificadoSection({ apiBase, apiKey }) {
                 </div>
                 <div className="upload-label">Adquirencias</div>
                 <div className="upload-sub">Opcional</div>
+                {adquirenciasFile && <div className="upload-filename">{adquirenciasFile.name}</div>}
                 <input className="upload-input" type="file" accept=".xlsx" aria-label="Archivo de Adquirencias" onChange={(event) => setAdquirenciasFile(event.target.files?.[0] || null)} disabled={loading} />
               </div>
               <div className="ref-row">

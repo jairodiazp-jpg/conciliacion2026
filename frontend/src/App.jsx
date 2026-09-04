@@ -218,6 +218,45 @@ function App() {
           margin-bottom: 18px;
         }
 
+        /* Responsive behavior */
+        @media (max-width: 1200px) {
+          .upload-grid {
+            grid-template-columns: repeat(2, 1fr);
+          }
+        }
+
+        @media (max-width: 700px) {
+          .upload-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        /* Loaded state for tiles */
+        .upload-tile.loaded {
+          border-color: rgba(34,197,94,0.28);
+          background: linear-gradient(180deg, rgba(34,197,94,0.04), rgba(34,197,94,0.02));
+        }
+
+        .upload-tile.loaded .upload-icon {
+          background: linear-gradient(180deg, #22c55e, #16a34a);
+          color: white;
+          box-shadow: 0 6px 18px rgba(34,197,94,0.18);
+        }
+
+        .upload-tile.loaded .upload-label {
+          color: var(--muted-strong);
+        }
+
+        .upload-tile.loaded .upload-sub {
+          color: var(--muted-strong);
+        }
+
+        .upload-tile .upload-filename {
+          font-size: 0.85rem;
+          color: var(--muted-strong);
+          margin-top: 8px;
+        }
+
         .upload-tile {
           background: transparent;
           border-radius: 14px;

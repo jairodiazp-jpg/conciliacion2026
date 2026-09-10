@@ -96,6 +96,7 @@ function App() {
 
   return (
     <div className="app-shell">
+      <div className="corner-version">Version acqui</div>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap');
 
@@ -982,6 +983,24 @@ function App() {
         .content-grid {
           display: grid;
           gap: 18px;
+        }
+
+        .corner-version {
+          position: fixed;
+          top: 18px;
+          right: 18px;
+          z-index: 20;
+          padding: 7px 12px;
+          border-radius: 999px;
+          border: 1px solid rgba(37, 99, 235, 0.16);
+          background: rgba(255, 255, 255, 0.9);
+          color: var(--muted-strong);
+          font-size: 0.74rem;
+          font-weight: 800;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+          backdrop-filter: blur(10px);
         }
 
         @media (max-width: 1100px) {

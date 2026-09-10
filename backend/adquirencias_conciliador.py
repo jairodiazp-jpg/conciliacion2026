@@ -8,6 +8,8 @@ from typing import Any
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill
 
+from utils import parse_date
+
 
 # ============================================================
 # COLOR ADQUIRENCIAS
@@ -100,6 +102,12 @@ class AdquirenciasConciliador:
         )
 
         return text.strip()
+
+    def _normalizar_fecha_igualdad(self, value: Any) -> str | None:
+        parsed = parse_date(value)
+        if parsed is not None:
+            return parsed.isoformat()
+        return None
 
     # ========================================================
     # NORMALIZAR VALOR
@@ -249,45 +257,36 @@ class AdquirenciasConciliador:
 
     def _buscar_hoja_ccs(self):
 
-        objetivo = "bancolombia cta 690"
-
         for ws in self.ccs_wb.worksheets:
-
-            nombre = (
-                str(ws.title)
-                .strip()
-                .lower()
-            )
-
-            if nombre == objetivo:
-
-                return ws
-
-        # Fallback seguro
-        for ws in self.ccs_wb.worksheets:
-
-            nombre = (
-                str(ws.title)
-                .strip()
-                .lower()
-            )
-
-            if (
-                "bancolombia" in nombre
-                and "690" in nombre
-            ):
-
+            nombre = str(ws.title).strip().lower()
+            if "2490" in nombre:
                 return ws
 
         raise ValueError(
-            "No se encontró la hoja "
-            "'Bancolombia Cta 690'. "
+            "No se encontró la hoja correspondiente a la cuenta CCS 2490. "
             f"Hojas disponibles: {self.ccs_wb.sheetnames}"
         )
 
     # ========================================================
     # DETECTAR COLUMNAS CCS
     # ========================================================
+
+    def _detectar_columna_cuenta(self, ws) -> int | None:
+        nombres = {
+            "cuenta",
+            "cta",
+            "cuenta ccs",
+            "cuenta bancaria",
+            "numero cuenta",
+        }
+        for fila in range(1, min(ws.max_row, 30) + 1):
+            for cell in ws[fila]:
+                if cell.value is None:
+                    continue
+                nombre = str(cell.value).strip().lower()
+                if nombre in nombres or "cuenta" in nombre:
+                    return cell.column
+        return None
 
     def _detectar_columnas_ccs(self, ws) -> tuple[int, int]:
         return self.CCS_AUTH_COL, self.CCS_VALUE_COL
@@ -570,6 +569,7 @@ class AdquirenciasConciliador:
         ccs_auth_col = ccs_struct.get(self.CCS_AUTH_HEADER, 6)
         ccs_val_col = ccs_struct.get(self.CCS_VALUE_HEADER, 8)
         ccs_obs_col, ccs_header_row = self._obtener_columna_observaciones_ccs(ccs_sheet, ccs_auth_col, ccs_val_col)
+        ccs_cuenta_col = self._detectar_columna_cuenta(ccs_sheet)
 
         # ====================================================
         # INICIO DATOS CCS
@@ -583,7 +583,7 @@ class AdquirenciasConciliador:
         # ====================================================
 
         ccs_index: dict[
-            tuple[str, int],
+            tuple[str, str, int],
             list[int],
         ] = {}
 
@@ -594,13 +594,23 @@ class AdquirenciasConciliador:
             ccs_sheet.max_row + 1,
         ):
 
+            if ccs_cuenta_col is not None:
+                cuenta_ccs = str(
+                    ccs_sheet.cell(
+                        row=row,
+                        column=ccs_cuenta_col,
+                    ).value
+                    or ""
+                ).strip()
+                if cuenta_ccs and '2490' not in cuenta_ccs.replace(' ', ''):
+                    continue
+
             auth = self._normalizar_auth(
                 ccs_sheet.cell(
                     row=row,
                     column=ccs_auth_col,
                 ).value
             )
-
             if not auth:
                 continue
 
@@ -608,13 +618,35 @@ class AdquirenciasConciliador:
                 row=row,
                 column=ccs_val_col,
             ).value
+            if raw_value is None:
+                continue
 
-            value_key = self._valor_key(
-                raw_value
+            fecha_value = self._normalizar_fecha_igualdad(
+                ccs_sheet.cell(row=row, column=ccs_auth_col + 1).value
             )
+            if fecha_value is None:
+                fecha_value = self._normalizar_fecha_igualdad(
+                    ccs_sheet.cell(row=row, column=max(1, ccs_auth_col - 1)).value
+                )
+            if fecha_value is None:
+                fecha_value = self._normalizar_fecha_igualdad(
+                    ccs_sheet.cell(row=row, column=ccs_val_col - 1).value
+                )
+            if fecha_value is None:
+                # Busca la primera fecha válida dentro de la fila para respetar el criterio exacto de fecha.
+                row_values = [cell.value for cell in ccs_sheet[row]]
+                for cell_value in row_values:
+                    parsed = self._normalizar_fecha_igualdad(cell_value)
+                    if parsed is not None:
+                        fecha_value = parsed
+                        break
+            if fecha_value is None:
+                continue
 
+            value_key = self._valor_key(raw_value)
             key = (
                 auth,
+                fecha_value,
                 value_key,
             )
 
@@ -656,23 +688,38 @@ class AdquirenciasConciliador:
                 row=row,
                 column=adq_val_col,
             ).value
+            if raw_value is None:
+                continue
 
-            value = self._normalizar_valor(
-                raw_value
+            fecha_adq = self._normalizar_fecha_igualdad(
+                adq_sheet.cell(row=row, column=max(1, adq_auth_col - 2)).value
             )
+            if fecha_adq is None:
+                fecha_adq = self._normalizar_fecha_igualdad(
+                    adq_sheet.cell(row=row, column=max(1, adq_val_col - 1)).value
+                )
+            if fecha_adq is None:
+                row_values = [cell.value for cell in adq_sheet[row]]
+                for cell_value in row_values:
+                    parsed = self._normalizar_fecha_igualdad(cell_value)
+                    if parsed is not None:
+                        fecha_adq = parsed
+                        break
+            if fecha_adq is None:
+                continue
 
-            value_key = self._valor_key(
-                raw_value
-            )
+            value = self._normalizar_valor(raw_value)
+            value_key = self._valor_key(raw_value)
 
             # =================================================
             # CRUCE REAL
             #
-            # AUTORIZACIÓN + VALOR
+            # AUTORIZACIÓN + FECHA EXACTA + VALOR EXACTO + CUENTA 2490
             # =================================================
 
             key = (
                 auth,
+                fecha_adq,
                 value_key,
             )
 
@@ -693,6 +740,7 @@ class AdquirenciasConciliador:
             adquirencia_nombre = (
                 f"ADQUIRENCIA {cruce_count}"
             )
+            es_duplicado = len(matches) > 1
 
             # =================================================
             # PINTAR ADQUIRENCIA
@@ -711,11 +759,18 @@ class AdquirenciasConciliador:
                 for x in matches
             )
 
+            detalle_duplicado = (
+                " | VALIDAR DUPLICADO: varios candidatos CCS 2490 para la misma aprobación, fecha y valor"
+                if es_duplicado
+                else ""
+            )
+
             observacion_adq = (
-                f"{adquirencia_nombre} cruza con CCS Memorando (hoja {ccs_sheet.title.strip()}) | "
+                f"{adquirencia_nombre} cruza con CCS 2490 (hoja {ccs_sheet.title.strip()}) | "
                 f"Fila(s) CCS: {filas_ccs} | "
                 f"Autorización: {auth} | "
-                f"Valor: {value:.2f}"
+                f"Fecha: {fecha_adq} | "
+                f"Valor: {value:.2f}{detalle_duplicado}"
             )
 
             self._agregar_observacion(
@@ -746,7 +801,8 @@ class AdquirenciasConciliador:
                 observacion_ccs = (
                     f"{adquirencia_nombre} cruza con Adquirencias fila {row} | "
                     f"Autorización: {auth} | "
-                    f"Valor: {value:.2f}"
+                    f"Fecha: {fecha_adq} | "
+                    f"Valor: {value:.2f}{detalle_duplicado}"
                 )
 
                 self._agregar_observacion(
@@ -934,7 +990,7 @@ class AdquirenciasConciliador:
                     ccs_sheet.title,
 
                 "criterio_cruce":
-                    "AUTORIZACION + VALOR EXACTO",
+                    "AUTORIZACION + FECHA EXACTA + VALOR EXACTO + CUENTA 2490",
 
                 "adquirencias_autorizacion":
                     "W",

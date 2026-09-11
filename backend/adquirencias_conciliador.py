@@ -58,7 +58,8 @@ class AdquirenciasConciliador:
 
         Usa comparación tolerante (normalizando mayúsculas, acentos y símbolos)
         para detectar encabezados que pueden variar levemente en los archivos del
-        cliente.
+        cliente. Si no se encuentran coincidencias exactas, se intenta una
+        búsqueda por palabras clave (subcadena) como fallback.
         """
         def _normalize_text(s: str) -> str:
             import unicodedata
@@ -71,18 +72,53 @@ class AdquirenciasConciliador:
             s = "".join(ch for ch in s if ch.isalnum() or ch.isspace())
             return s.strip()
 
+        # palabras clave por encabezado para fallback por subcadena
+        keywords_map = {}
+        for h in headers:
+            hn = h.lower()
+            if "autoriz" in hn or "aprob" in hn or "aprobaci" in hn or "n°" in hn or "nro" in hn or "codigo" in hn:
+                keywords_map[h] = ["autoriz", "aprob", "codigo", "nsu", "ref", "nro"]
+            elif "valor" in hn or "monto" in hn or "importe" in hn:
+                keywords_map[h] = ["valor", "monto", "importe", "amount"]
+            elif "observ" in hn or "coment" in hn:
+                keywords_map[h] = ["observ", "coment", "nota"]
+            else:
+                keywords_map[h] = [hn]
+
         normalized_headers = {h: _normalize_text(h) for h in headers}
-        found = {}
+        found: dict[str, int] = {}
+
+        # Primera pasada: coincidencia exacta en versión normalizada
         for fila in range(1, min(ws.max_row, 30) + 1):
             for cell in ws[fila]:
                 if cell.value is None:
                     continue
                 val_norm = _normalize_text(cell.value)
                 for h, h_norm in normalized_headers.items():
-                    if val_norm == h_norm:
+                    if val_norm == h_norm and h not in found:
                         found[h] = cell.column
             if len(found) == len(headers):
                 break
+
+        # Fallback: búsqueda por subcadena usando keywords_map
+        if len(found) < len(headers):
+            for fila in range(1, min(ws.max_row, 30) + 1):
+                for cell in ws[fila]:
+                    if cell.value is None:
+                        continue
+                    val_norm = _normalize_text(cell.value)
+                    for h, keys in keywords_map.items():
+                        if h in found:
+                            continue
+                        for key in keys:
+                            if key and key in val_norm:
+                                found[h] = cell.column
+                                break
+                        if h in found:
+                            break
+                if len(found) == len(headers):
+                    break
+
         return found
 
     def _detectar_inicio_datos(self, ws, auth_col: int, *, fallback: int = 19) -> int:

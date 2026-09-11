@@ -135,15 +135,31 @@ function ProcesoUnificadoSection({ apiBase, view = "inicio" }) {
         body: formData,
       });
 
-      const payload = await response.json();
+      let payload = {};
+      try {
+        payload = await response.json();
+      } catch {
+        payload = {};
+      }
       if (!response.ok) {
-        throw new Error(payload?.detail || "No se pudo procesar la información");
+        const detail = payload?.detail;
+        const detailText = typeof detail === "string" ? detail : JSON.stringify(detail || "");
+        throw new Error(detailText || `No se pudo procesar la información (${response.status})`);
       }
 
       setResult(payload);
       downloadResult(payload);
     } catch (err) {
-      setError(err.message || "Error inesperado durante el procesamiento");
+      const rawMessage = String(err?.message || "");
+      const isNetworkError =
+        rawMessage === "Failed to fetch" ||
+        rawMessage.includes("NetworkError") ||
+        rawMessage.includes("fetch");
+      setError(
+        isNetworkError
+          ? "No se pudo conectar con el servidor. Confirma que el backend esté activo en el puerto 8000 e inténtalo de nuevo."
+          : rawMessage || "Error inesperado durante el procesamiento"
+      );
       setResult(null);
     } finally {
       setLoading(false);
@@ -174,7 +190,7 @@ function ProcesoUnificadoSection({ apiBase, view = "inicio" }) {
           La conciliación sigue usando el mismo backend y las mismas reglas de cruce. Aquí solo se muestra
           el entorno activo, sin cambiar tolerancias ni archivos.
         </p>
-        <p><strong>API:</strong> {apiBase}</p>
+        <p><strong>API:</strong> {apiBase || "Proxy local → http://127.0.0.1:8000"}</p>
         <p><strong>Versión:</strong> v{APP_VERSION}</p>
       </section>
     );

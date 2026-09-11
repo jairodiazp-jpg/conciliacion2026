@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { APP_VERSION } from "./generated/buildInfo";
 import ProcesoUnificadoSection from "./components/ProcesoUnificadoSection";
 
-const API_BASE = (import.meta.env.VITE_API_URL || "http://127.0.0.1:3000").replace(/\/$/, "");
+const configuredApi = String(import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
+const API_BASE = import.meta.env.DEV ? "" : configuredApi;
 
 function IconInicio() {
   return (

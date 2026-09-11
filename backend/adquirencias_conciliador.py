@@ -54,31 +54,70 @@ class AdquirenciasConciliador:
     # ========================================================
 
     def _detectar_estructura(self, ws, headers: list[str]) -> dict[str, int]:
-        """Busca encabezados en las primeras 30 filas."""
+        """Busca encabezados en las primeras 30 filas.
+
+        Usa comparación tolerante (normalizando mayúsculas, acentos y símbolos)
+        para detectar encabezados que pueden variar levemente en los archivos del
+        cliente.
+        """
+        def _normalize_text(s: str) -> str:
+            import unicodedata
+            if s is None:
+                return ""
+            s = str(s).strip().lower()
+            s = unicodedata.normalize("NFKD", s)
+            s = "".join(ch for ch in s if not unicodedata.combining(ch))
+            # conservar solo alfanuméricos y espacios
+            s = "".join(ch for ch in s if ch.isalnum() or ch.isspace())
+            return s.strip()
+
+        normalized_headers = {h: _normalize_text(h) for h in headers}
         found = {}
         for fila in range(1, min(ws.max_row, 30) + 1):
             for cell in ws[fila]:
-                if cell.value is None: continue
-                val = str(cell.value).strip()
-                for h in headers:
-                    if val.lower() == h.lower():
+                if cell.value is None:
+                    continue
+                val_norm = _normalize_text(cell.value)
+                for h, h_norm in normalized_headers.items():
+                    if val_norm == h_norm:
                         found[h] = cell.column
             if len(found) == len(headers):
                 break
         return found
 
     def _detectar_inicio_datos(self, ws, auth_col: int, *, fallback: int = 19) -> int:
-        """Busca la primera fila después del encabezado que tenga datos."""
+        """Busca la primera fila después del encabezado que tenga datos.
+
+        Mejor manejo de fallback: si no se detecta encabezado textual, detectar la
+        primera fila con un valor en la columna de autorización dentro de las
+        primeras 30 filas y considerarla fila de datos. Si nada aparece, usar el
+        fallback original.
+        """
         encabezados_auth = {
             "n° de aprobación",
             "n de aprobacion",
             "codigo autorizacion",
             "código autorización",
         }
-        for fila in range(1, min(ws.max_row, 30) + 5):
+        max_scan = min(ws.max_row, 30) + 5
+        for fila in range(1, max_scan):
             val = ws.cell(row=fila, column=auth_col).value
             if val is not None and str(val).strip().lower() in encabezados_auth:
                 return fila + 1
+
+        # Si no se encontró un encabezado textual, intentar detectar la primer fila
+        # con datos en la columna de autorización dentro de las primeras filas.
+        for fila in range(1, min(ws.max_row, 30) + 1):
+            val = ws.cell(row=fila, column=auth_col).value
+            if val is not None and str(val).strip() != "":
+                # Si el valor detectado parece un encabezado (por ejemplo contiene letras),
+                # intentar considerarlo encabezado y devolver la siguiente fila.
+                text = str(val).strip().lower()
+                if any(ch.isalpha() for ch in text) and len(text) > 2:
+                    return fila + 1
+                # En caso contrario, asumir que es la primera fila de datos.
+                return fila
+
         return fallback
 
     # ========================================================
@@ -781,6 +820,28 @@ class AdquirenciasConciliador:
             )
 
             # =================================================
+            # AGREGAR AL DATASET INTERNO (PARA LOGS)
+            # =================================================
+
+            try:
+                matches_entry = {
+                    "tipo": "adquirencia_cruzada",
+                    "valor": float(value),
+                    "fecha": fecha_adq,
+                    "confianza": 0.95,
+                    "detalle": observacion_adq,
+                    "adquirencias_row": row,
+                    "ccs_rows": matches,
+                    "hoja_ccs": ccs_sheet.title,
+                }
+                if "dataset_adquirencias" not in locals():
+                    dataset_adquirencias = []
+                dataset_adquirencias.append(matches_entry)
+            except Exception:
+                # No bloquear el procesamiento en caso de error agregando al dataset
+                pass
+
+            # =================================================
             # MARCAR CCS
             # =================================================
 
@@ -946,7 +1007,7 @@ class AdquirenciasConciliador:
         # RESULTADO
         # ====================================================
 
-        return {
+        result = {
 
             "adquirencias_file": (
                 base64.b64encode(
@@ -1005,3 +1066,9 @@ class AdquirenciasConciliador:
                     "H",
             },
         }
+
+        # Incluir dataset de coincidencias si fue generado
+        if 'dataset_adquirencias' in locals():
+            result['dataset'] = dataset_adquirencias
+
+        return result

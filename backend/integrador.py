@@ -446,6 +446,23 @@ class ProcesadorIntegrado:
                 
                 # Actualizar el archivo contable con la trazabilidad de adquirencias
                 contable_result["file"] = adq_res["ccs_file"]
+
+                # Extender logs con dataset de adquirencias (si existe) para que el frontend muestre trazabilidad
+                try:
+                    for item in adq_res.get("dataset", []):
+                        try:
+                            logs.append({
+                                "tipo": item.get("tipo", "adquirencia_cruzada"),
+                                "valor": round(float(item.get("valor") or 0), 2),
+                                "fecha": item.get("fecha") if isinstance(item.get("fecha"), str) else (item.get("fecha").isoformat() if hasattr(item.get("fecha"), "isoformat") else item.get("fecha")),
+                                "confianza": item.get("confianza", 0.95),
+                                "detalle": item.get("detalle", ""),
+                            })
+                        except Exception:
+                            continue
+                except Exception:
+                    # No bloquear el flujo si el dataset no es consumible
+                    pass
                 
                 # Agregar el archivo de adquirencias procesado a la lista de archivos
                 files.append({

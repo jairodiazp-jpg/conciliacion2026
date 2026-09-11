@@ -91,7 +91,7 @@ input {
   width: 42px;
   height: 42px;
   border-radius: 12px;
-  background: #dc2626;
+  background: var(--navy);
   display: grid;
   place-items: center;
   flex-shrink: 0;
@@ -106,7 +106,6 @@ input {
   font-size: 1.05rem;
   letter-spacing: 0.08em;
   line-height: 1;
-  color: #dc2626;
 }
 
 .brand-copy span {

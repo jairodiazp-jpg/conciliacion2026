@@ -55,7 +55,7 @@ function App() {
             <div className="brand-mark" aria-hidden="true">
               <svg width="26" height="26" viewBox="0 0 26 26" fill="none">
                 <path d="M4 13 C8 8, 12 8, 16 13 S22 18, 24 13" stroke="#fff" strokeWidth="2" strokeLinecap="round" />
-                <path d="M4 17 C8 12, 12 12, 16 17 S22 22, 24 17" stroke="#fecaca" strokeWidth="1.8" strokeLinecap="round" />
+                <path d="M4 17 C8 12, 12 12, 16 17 S22 22, 24 17" stroke="#7EB6FF" strokeWidth="1.8" strokeLinecap="round" />
               </svg>
             </div>
             <div className="brand-copy">

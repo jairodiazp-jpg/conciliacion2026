@@ -58,6 +58,24 @@ DESCRIPTION_ALIASES = {
     "glosa",
 }
 PSE_DESCRIPTION_MARKER = "pago virtual pse"
+DATE_ALIASES_PRIORITY = (
+    "fecha documento",
+    "fecha de transaccion",
+    "fecha transaccion",
+    "fecha movimiento",
+    "transaction date",
+    "fecha contabilizacion",
+    "fecha",
+    "date",
+)
+VALUE_ALIASES_PRIORITY = (
+    "valor transaccion",
+    "valor movimiento",
+    "valor",
+    "monto",
+    "importe",
+    "amount",
+)
 
 VALUE_TOLERANCE_DEFAULT = 0.01
 DATE_TOLERANCE_DEFAULT = 1
@@ -228,31 +246,50 @@ class PseConciliador:
             return match.group(0)
         return sheet_name.strip()
 
+    def _alias_priority(self, header: str, aliases: tuple[str, ...]) -> int | None:
+        if header in aliases:
+            return aliases.index(header)
+        for index, alias in enumerate(aliases):
+            if alias in header:
+                return 100 + index
+        return None
+
     def _detect_schema(self, sheet: Worksheet) -> SheetSchema | None:
         for row in sheet.iter_rows(min_row=1, max_row=min(sheet.max_row, 30), min_col=1, max_col=sheet.max_column):
-            header_map: dict[str, int] = {}
+            date_candidates: list[tuple[int, int]] = []
+            value_candidates: list[tuple[int, int]] = []
+            account_col: int | None = None
+            description_col: int | None = None
+
             for cell in row:
                 if not isinstance(cell.value, str):
                     continue
                 header = self._normalizar_texto(cell.value)
                 if not header:
                     continue
-                if (header in DATE_ALIASES or any(alias in header for alias in DATE_ALIASES)) and "date" not in header_map:
-                    header_map["date"] = cell.column
-                if (header in VALUE_ALIASES or any(alias in header for alias in VALUE_ALIASES)) and "value" not in header_map:
-                    header_map["value"] = cell.column
-                if (header in ACCOUNT_ALIASES or any(alias in header for alias in ACCOUNT_ALIASES)) and "account" not in header_map:
-                    header_map["account"] = cell.column
-                if (header in DESCRIPTION_ALIASES or any(alias in header for alias in DESCRIPTION_ALIASES)) and "description" not in header_map:
-                    header_map["description"] = cell.column
 
-            if "date" in header_map and "value" in header_map:
+                date_priority = self._alias_priority(header, DATE_ALIASES_PRIORITY)
+                if date_priority is not None:
+                    date_candidates.append((date_priority, cell.column))
+
+                value_priority = self._alias_priority(header, VALUE_ALIASES_PRIORITY)
+                if value_priority is not None:
+                    value_candidates.append((value_priority, cell.column))
+
+                if account_col is None and (header in ACCOUNT_ALIASES or any(alias in header for alias in ACCOUNT_ALIASES)):
+                    account_col = cell.column
+                if description_col is None and (
+                    header in DESCRIPTION_ALIASES or any(alias in header for alias in DESCRIPTION_ALIASES)
+                ):
+                    description_col = cell.column
+
+            if date_candidates and value_candidates:
                 return SheetSchema(
                     header_row=row[0].row,
-                    date_col=header_map["date"],
-                    value_col=header_map["value"],
-                    account_col=header_map.get("account"),
-                    description_col=header_map.get("description"),
+                    date_col=min(date_candidates)[1],
+                    value_col=min(value_candidates)[1],
+                    account_col=account_col,
+                    description_col=description_col,
                 )
         return None
 

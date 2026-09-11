@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import unicodedata
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from io import BytesIO
 from typing import Any
@@ -53,6 +54,14 @@ class AdquirenciasConciliador:
     # DETECTAR COLUMNAS Y FILAS DINÁMICAMENTE
     # ========================================================
 
+    def _normalize_header(self, value: Any) -> str:
+        if value is None:
+            return ""
+        text = str(value).strip().lower()
+        text = unicodedata.normalize("NFKD", text)
+        text = "".join(ch for ch in text if not unicodedata.combining(ch))
+        return "".join(ch for ch in text if ch.isalnum() or ch.isspace()).strip()
+
     def _detectar_estructura(self, ws, headers: list[str]) -> dict[str, int]:
         """Busca encabezados en las primeras 30 filas.
 
@@ -62,15 +71,7 @@ class AdquirenciasConciliador:
         búsqueda por palabras clave (subcadena) como fallback.
         """
         def _normalize_text(s: str) -> str:
-            import unicodedata
-            if s is None:
-                return ""
-            s = str(s).strip().lower()
-            s = unicodedata.normalize("NFKD", s)
-            s = "".join(ch for ch in s if not unicodedata.combining(ch))
-            # conservar solo alfanuméricos y espacios
-            s = "".join(ch for ch in s if ch.isalnum() or ch.isspace())
-            return s.strip()
+            return self._normalize_header(s)
 
         # palabras clave por encabezado para fallback por subcadena
         keywords_map = {}
@@ -176,13 +177,49 @@ class AdquirenciasConciliador:
             .replace("\ufeff", "")
         )
 
-        return text.strip()
+        text = text.strip()
+        if text.endswith(".0") and text.replace(".", "", 1).isdigit():
+            text = text[:-2]
+        return text
 
     def _normalizar_fecha_igualdad(self, value: Any) -> str | None:
         parsed = parse_date(value)
         if parsed is not None:
             return parsed.isoformat()
         return None
+
+    def _columnas_fecha(self, ws, preferencias: tuple[str, ...]) -> list[int]:
+        """Detecta columnas de fecha ordenadas por prioridad de encabezado."""
+        scored: list[tuple[int, int]] = []
+        seen: set[int] = set()
+        for fila in range(1, min(ws.max_row, 30) + 1):
+            for cell in ws[fila]:
+                if cell.value is None or cell.column in seen:
+                    continue
+                header = self._normalize_header(cell.value)
+                if "fecha" not in header and "date" not in header:
+                    continue
+                if "canje" in header:
+                    priority = 80
+                else:
+                    priority = 50
+                    for index, preferencia in enumerate(preferencias):
+                        if preferencia in header:
+                            priority = index
+                            break
+                scored.append((priority, cell.column))
+                seen.add(cell.column)
+        scored.sort()
+        preferred = [column for priority, column in scored if priority < 80]
+        return preferred or [column for _, column in scored]
+
+    def _fechas_fila(self, ws, row: int, date_cols: list[int]) -> list[str]:
+        fechas: list[str] = []
+        for column in date_cols:
+            parsed = self._normalizar_fecha_igualdad(ws.cell(row=row, column=column).value)
+            if parsed and parsed not in fechas:
+                fechas.append(parsed)
+        return fechas
 
     # ========================================================
     # NORMALIZAR VALOR
@@ -421,13 +458,9 @@ class AdquirenciasConciliador:
                 if cell.value is None:
                     continue
 
-                texto = (
-                    str(cell.value)
-                    .strip()
-                    .lower()
-                )
+                texto = self._normalize_header(cell.value)
 
-                if texto in nombres:
+                if texto in nombres or "observ" in texto:
 
                     return cell.column
 
@@ -463,13 +496,9 @@ class AdquirenciasConciliador:
                 if cell.value is None:
                     continue
 
-                texto = (
-                    str(cell.value)
-                    .strip()
-                    .lower()
-                )
+                texto = self._normalize_header(cell.value)
 
-                if texto in nombres:
+                if texto in nombres or "observ" in texto:
 
                     return cell.column
 
@@ -511,13 +540,9 @@ class AdquirenciasConciliador:
                 if cell.value is None:
                     continue
 
-                texto = (
-                    str(cell.value)
-                    .strip()
-                    .lower()
-                )
+                texto = self._normalize_header(cell.value)
 
-                if texto in nombres:
+                if texto in nombres or "observ" in texto:
 
                     return cell.column, fila
 
@@ -636,15 +661,31 @@ class AdquirenciasConciliador:
         adq_struct = self._detectar_estructura(adq_sheet, [self.ADQ_AUTH_HEADER, self.ADQ_VALUE_HEADER, self.ADQ_OBS_HEADER])
         adq_auth_col = adq_struct.get(self.ADQ_AUTH_HEADER, 23)
         adq_val_col = adq_struct.get(self.ADQ_VALUE_HEADER, 16)
-        
-        # Usar el método ampliado para buscar la columna de observaciones
-        adq_obs_col = self._obtener_columna_observaciones_adq_ampliado(adq_sheet)
+        adq_obs_col = adq_struct.get(self.ADQ_OBS_HEADER) or self._obtener_columna_observaciones_adq_ampliado(adq_sheet)
+        adq_date_cols = self._columnas_fecha(
+            adq_sheet,
+            (
+                "fecha de transaccion",
+                "fecha transaccion",
+                "fecha de compensacion",
+                "fecha compensacion",
+                "fecha documento",
+            ),
+        )
 
         ccs_struct = self._detectar_estructura(ccs_sheet, [self.CCS_AUTH_HEADER, self.CCS_VALUE_HEADER, self.CCS_OBS_HEADER])
         ccs_auth_col = ccs_struct.get(self.CCS_AUTH_HEADER, 6)
         ccs_val_col = ccs_struct.get(self.CCS_VALUE_HEADER, 8)
         ccs_obs_col, ccs_header_row = self._obtener_columna_observaciones_ccs(ccs_sheet, ccs_auth_col, ccs_val_col)
-        ccs_cuenta_col = self._detectar_columna_cuenta(ccs_sheet)
+        ccs_date_cols = self._columnas_fecha(
+            ccs_sheet,
+            (
+                "fecha documento",
+                "fecha de transaccion",
+                "fecha transaccion",
+                "fecha contabilizacion",
+            ),
+        )
 
         # ====================================================
         # INICIO DATOS CCS
@@ -669,16 +710,6 @@ class AdquirenciasConciliador:
             ccs_sheet.max_row + 1,
         ):
 
-            if ccs_cuenta_col is not None:
-                cuenta_ccs = str(
-                    ccs_sheet.cell(
-                        row=row,
-                        column=ccs_cuenta_col,
-                    ).value
-                    or ""
-                ).strip()
-                if cuenta_ccs and '2490' not in cuenta_ccs.replace(' ', ''):
-                    continue
 
             auth = self._normalizar_auth(
                 ccs_sheet.cell(
@@ -696,39 +727,21 @@ class AdquirenciasConciliador:
             if raw_value is None:
                 continue
 
-            fecha_value = self._normalizar_fecha_igualdad(
-                ccs_sheet.cell(row=row, column=ccs_auth_col + 1).value
-            )
-            if fecha_value is None:
-                fecha_value = self._normalizar_fecha_igualdad(
-                    ccs_sheet.cell(row=row, column=max(1, ccs_auth_col - 1)).value
-                )
-            if fecha_value is None:
-                fecha_value = self._normalizar_fecha_igualdad(
-                    ccs_sheet.cell(row=row, column=ccs_val_col - 1).value
-                )
-            if fecha_value is None:
-                # Busca la primera fecha válida dentro de la fila para respetar el criterio exacto de fecha.
-                row_values = [cell.value for cell in ccs_sheet[row]]
-                for cell_value in row_values:
-                    parsed = self._normalizar_fecha_igualdad(cell_value)
-                    if parsed is not None:
-                        fecha_value = parsed
-                        break
-            if fecha_value is None:
+            fechas_ccs = self._fechas_fila(ccs_sheet, row, ccs_date_cols)
+            if not fechas_ccs:
                 continue
 
             value_key = self._valor_key(raw_value)
-            key = (
-                auth,
-                fecha_value,
-                value_key,
-            )
-
-            ccs_index.setdefault(
-                key,
-                [],
-            ).append(row)
+            for fecha_value in fechas_ccs:
+                key = (
+                    auth,
+                    fecha_value,
+                    value_key,
+                )
+                ccs_index.setdefault(
+                    key,
+                    [],
+                ).append(row)
 
             cantidad_ccs += 1
 
@@ -739,6 +752,8 @@ class AdquirenciasConciliador:
         cruce_count = 0
         cantidad_adq = 0
         cantidad_auth = 0
+        used_ccs_rows: set[int] = set()
+        dataset_adquirencias: list[dict[str, Any]] = []
 
         for row in range(
             adq_start_row,
@@ -766,21 +781,8 @@ class AdquirenciasConciliador:
             if raw_value is None:
                 continue
 
-            fecha_adq = self._normalizar_fecha_igualdad(
-                adq_sheet.cell(row=row, column=max(1, adq_auth_col - 2)).value
-            )
-            if fecha_adq is None:
-                fecha_adq = self._normalizar_fecha_igualdad(
-                    adq_sheet.cell(row=row, column=max(1, adq_val_col - 1)).value
-                )
-            if fecha_adq is None:
-                row_values = [cell.value for cell in adq_sheet[row]]
-                for cell_value in row_values:
-                    parsed = self._normalizar_fecha_igualdad(cell_value)
-                    if parsed is not None:
-                        fecha_adq = parsed
-                        break
-            if fecha_adq is None:
+            fechas_adq = self._fechas_fila(adq_sheet, row, adq_date_cols)
+            if not fechas_adq:
                 continue
 
             value = self._normalizar_valor(raw_value)
@@ -792,16 +794,18 @@ class AdquirenciasConciliador:
             # AUTORIZACIÓN + FECHA EXACTA + VALOR EXACTO + CUENTA 2490
             # =================================================
 
-            key = (
-                auth,
-                fecha_adq,
-                value_key,
-            )
-
-            matches = ccs_index.get(
-                key,
-                [],
-            )
+            matches: list[int] = []
+            fecha_adq = fechas_adq[0]
+            for fecha_candidata in fechas_adq:
+                candidatos = [
+                    ccs_row
+                    for ccs_row in ccs_index.get((auth, fecha_candidata, value_key), [])
+                    if ccs_row not in used_ccs_rows
+                ]
+                if candidatos:
+                    fecha_adq = fecha_candidata
+                    matches = candidatos
+                    break
 
             if not matches:
                 continue
@@ -811,11 +815,20 @@ class AdquirenciasConciliador:
             # =================================================
 
             cruce_count += 1
+            ccs_row_match = matches[0]
+            used_ccs_rows.add(ccs_row_match)
+            matches = [ccs_row_match]
 
             adquirencia_nombre = (
                 f"ADQUIRENCIA {cruce_count}"
             )
-            es_duplicado = len(matches) > 1
+            es_duplicado = len(
+                [
+                    ccs_row
+                    for ccs_row in ccs_index.get((auth, fecha_adq, value_key), [])
+                    if ccs_row != ccs_row_match
+                ]
+            ) > 0
 
             # =================================================
             # PINTAR ADQUIRENCIA
@@ -841,11 +854,8 @@ class AdquirenciasConciliador:
             )
 
             observacion_adq = (
-                f"{adquirencia_nombre} cruza con CCS 2490 (hoja {ccs_sheet.title.strip()}) | "
-                f"Fila(s) CCS: {filas_ccs} | "
-                f"Autorización: {auth} | "
-                f"Fecha: {fecha_adq} | "
-                f"Valor: {value:.2f}{detalle_duplicado}"
+                f"{adquirencia_nombre} encontrado en {ccs_sheet.title.strip()}:fila {filas_ccs}. "
+                f"Autorización: {auth} | Fecha: {fecha_adq} | Valor: {value:.2f}{detalle_duplicado}"
             )
 
             self._agregar_observacion(
@@ -859,8 +869,8 @@ class AdquirenciasConciliador:
             # AGREGAR AL DATASET INTERNO (PARA LOGS)
             # =================================================
 
-            try:
-                matches_entry = {
+            dataset_adquirencias.append(
+                {
                     "tipo": "adquirencia_cruzada",
                     "valor": float(value),
                     "fecha": fecha_adq,
@@ -870,12 +880,7 @@ class AdquirenciasConciliador:
                     "ccs_rows": matches,
                     "hoja_ccs": ccs_sheet.title,
                 }
-                if "dataset_adquirencias" not in locals():
-                    dataset_adquirencias = []
-                dataset_adquirencias.append(matches_entry)
-            except Exception:
-                # No bloquear el procesamiento en caso de error agregando al dataset
-                pass
+            )
 
             # =================================================
             # MARCAR CCS
@@ -896,10 +901,8 @@ class AdquirenciasConciliador:
                 # ---------------------------------------------
 
                 observacion_ccs = (
-                    f"{adquirencia_nombre} cruza con Adquirencias fila {row} | "
-                    f"Autorización: {auth} | "
-                    f"Fecha: {fecha_adq} | "
-                    f"Valor: {value:.2f}{detalle_duplicado}"
+                    f"{adquirencia_nombre} encontrado en Adquirencias ({adq_sheet.title}):fila {row}. "
+                    f"Autorización: {auth} | Fecha: {fecha_adq} | Valor: {value:.2f}{detalle_duplicado}"
                 )
 
                 self._agregar_observacion(
@@ -1087,7 +1090,7 @@ class AdquirenciasConciliador:
                     ccs_sheet.title,
 
                 "criterio_cruce":
-                    "AUTORIZACION + FECHA EXACTA + VALOR EXACTO + CUENTA 2490",
+                    "AUTORIZACION + FECHA TRANSACCION/DOCUMENTO + VALOR EXACTO + CUENTA 2490",
 
                 "adquirencias_autorizacion":
                     "W",
@@ -1103,8 +1106,6 @@ class AdquirenciasConciliador:
             },
         }
 
-        # Incluir dataset de coincidencias si fue generado
-        if 'dataset_adquirencias' in locals():
-            result['dataset'] = dataset_adquirencias
+        result["dataset"] = dataset_adquirencias
 
         return result

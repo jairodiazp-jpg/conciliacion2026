@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: conciliacion2026-api
+    env: docker
+    rootDir: backend
+    plan: free
+    autoDeploy: true
+    healthCheckPath: /health
+    envVars:
+      - key: ALLOWED_ORIGINS
+        value: https://conciliacion2026-web.onrender.com,https://conciliador-contable.netlify.app
+
+  - type: static
+    name: conciliacion2026-web
+    rootDir: frontend
+    plan: free
+    autoDeploy: true
+    buildCommand: npm install && npm run build
+    publishDir: dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://conciliacion2026-api.onrender.com

@@ -36,7 +36,7 @@ class VoucherSearchTests(unittest.TestCase):
     def test_ambiguous_results_are_not_selected(self):
         original = excel_bytes([(100, "2026-01-01", "A", "1", "1"), (100, "2026-01-01", "B", "2", "2")])
         result = search_voucher_documents(original, "memo.xlsx", [], "100", "2026-01-01")
-        self.assertTrue(all(item["status"] == "AMBIGUO" for item in result["results"]))
+        self.assertTrue(all(item["status"] == "PENDIENTE DE REVISIÓN" for item in result["results"]))
 
     def test_unsupported_source_is_reported(self):
         result = search_voucher_documents(excel_bytes([]), "memo.xlsx", [("scan.pdf", b"not indexed")], "1")

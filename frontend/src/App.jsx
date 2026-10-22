@@ -51,10 +51,9 @@ function IconQuery() {
 function IconVoucher() {
   return (
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M6 3h8l4 4v14H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
-      <path d="M14 3v5h5M8 12h5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-      <circle cx="16.5" cy="16.5" r="2.5" stroke="currentColor" strokeWidth="1.7" />
-      <path d="m18.3 18.3 2 2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+      <rect x="4" y="6" width="16" height="13" rx="3" stroke="currentColor" strokeWidth="1.7" />
+      <path d="M8 6V4h8v2M8 12h.01M16 12h.01M9 16h6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+      <path d="M9 2v2M15 2v2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
     </svg>
   );
 }
@@ -93,7 +92,7 @@ function App() {
             </button>
             <button className={`nav-item ${view === "voucher" ? "active" : ""}`} onClick={() => setView("voucher")}>
               <IconVoucher />
-              Buscar valor voucher
+              Agente para buscar valores en voucher
             </button>
           </nav>
 
@@ -108,7 +107,7 @@ function App() {
 
         <main className="workspace">
           <h1 className="page-title">
-            {view === "query-memorando" ? "Conciliar Query y memorando ya conciliado" : view === "voucher" ? "Buscar valor voucher" : "Automatización de pagos"}
+            {view === "query-memorando" ? "Conciliar Query y memorando ya conciliado" : view === "voucher" ? "Agente para buscar valores en voucher" : "Automatización de pagos"}
           </h1>
           {view === "query-memorando"
             ? <QueryMemorandoSection apiBase={API_BASE} />

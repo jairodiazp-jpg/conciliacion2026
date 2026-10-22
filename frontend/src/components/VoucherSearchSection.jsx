@@ -5,6 +5,7 @@ function VoucherSearchSection({ apiBase }) {
   const [vouchers, setVouchers] = useState([]);
   const [value, setValue] = useState("");
   const [exactDate, setExactDate] = useState("");
+  const [storeCode, setStoreCode] = useState("");
   const [store, setStore] = useState("");
   const [reference, setReference] = useState("");
   const [account, setAccount] = useState("");
@@ -13,8 +14,8 @@ function VoucherSearchSection({ apiBase }) {
   const [result, setResult] = useState(null);
 
   const analyze = async () => {
-    if (!memorando || vouchers.length === 0) {
-      setError("Selecciona el memorando conciliado y al menos un soporte.");
+    if (!memorando || vouchers.length === 0 || !storeCode.trim() || !value.trim()) {
+      setError("Indica el código del punto de venta, el valor exacto, el memorando y al menos un soporte.");
       return;
     }
     setLoading(true);
@@ -24,6 +25,7 @@ function VoucherSearchSection({ apiBase }) {
       form.append("memorando_file", memorando);
       vouchers.forEach((file) => form.append("voucher_files", file));
       form.append("value", value);
+      form.append("store_code", storeCode.trim());
       if (exactDate) form.append("exact_date", exactDate);
       if (store) form.append("store", store);
       if (reference) form.append("reference", reference);
@@ -51,6 +53,7 @@ function VoucherSearchSection({ apiBase }) {
   const clear = () => {
     setValue("");
     setExactDate("");
+    setStoreCode("");
     setStore("");
     setReference("");
     setAccount("");
@@ -63,7 +66,7 @@ function VoucherSearchSection({ apiBase }) {
       <div className="panel-heading">
         <span className="cloud-badge">⌕</span>
         <div>
-          <h2>Buscar valor voucher</h2>
+          <h2>Agente para buscar valores en voucher</h2>
           <p>Consulta de solo lectura. Los documentos originales no se modifican.</p>
         </div>
       </div>
@@ -82,15 +85,15 @@ function VoucherSearchSection({ apiBase }) {
         </label>
       </div>
       <div className="refs-grid">
-        <div className="ref-field"><label>Valor exacto</label><input value={value} onChange={(event) => setValue(event.target.value)} placeholder="Ej. 28144.00" /></div>
+        <div className="ref-field"><label>Código del punto de venta</label><input value={storeCode} onChange={(event) => setStoreCode(event.target.value)} required /></div>
+        <div className="ref-field"><label>Valor exacto</label><input value={value} onChange={(event) => setValue(event.target.value)} placeholder="Ej. 28144.00" required /></div>
         <div className="ref-field"><label>Fecha exacta (opcional)</label><input type="date" value={exactDate} onChange={(event) => setExactDate(event.target.value)} /></div>
         <div className="ref-field"><label>Punto de venta (opcional)</label><input value={store} onChange={(event) => setStore(event.target.value)} /></div>
         <div className="ref-field"><label>Referencia o aprobación</label><input value={reference} onChange={(event) => setReference(event.target.value)} /></div>
         <div className="ref-field"><label>Cuenta bancaria</label><input value={account} onChange={(event) => setAccount(event.target.value)} /></div>
       </div>
       <div className="action-row">
-        <button className="btn btn-primary" onClick={analyze} disabled={loading || !memorando || vouchers.length === 0}>{loading ? "Analizando..." : "Analizar documentos"}</button>
-        <button className="btn btn-secondary" onClick={search} disabled={loading || !value.trim() || !memorando || vouchers.length === 0}>Buscar valor</button>
+        <button className="btn btn-primary" onClick={analyze} disabled={loading || !storeCode.trim() || !value.trim() || !memorando || vouchers.length === 0}>{loading ? "Analizando..." : "Buscar voucher"}</button>
         <button className="btn btn-ghost" onClick={clear} disabled={loading}>Limpiar búsqueda</button>
       </div>
       {error && <p className="error">{error}</p>}
@@ -104,7 +107,7 @@ function VoucherSearchSection({ apiBase }) {
           <div style={{ overflowX: "auto" }}>
             <table className="logs-table">
               <thead><tr><th>Estado</th><th>Valor encontrado</th><th>Fecha</th><th>Punto de venta</th><th>Archivo</th><th>Ubicación</th><th>Evidencia</th><th>Observación</th></tr></thead>
-              <tbody>{result.results.map((item, index) => <tr key={`${item.file}-${item.row}-${index}`}><td>{item.status}</td><td>{item.value}</td><td>{item.date || "NO VERIFICADA"}</td><td>{item.store}</td><td>{item.file}</td><td>{item.location}</td><td className="logs-detail">{item.evidence}</td><td>{item.observation}</td></tr>)}</tbody>
+              <tbody>{result.results.map((item, index) => <tr key={`${item.file}-${item.row}-${index}`} style={{ background: item.status === "PAGO VERIFICADO" ? "#D1FAE5" : "#FED7AA" }}><td>{item.status}</td><td>{item.value}</td><td>{item.date || "NO IDENTIFICADA"}</td><td>{item.store}</td><td>{item.file}</td><td>{item.location}</td><td className="logs-detail">{item.evidence}</td><td>{item.observation}</td></tr>)}</tbody>
             </table>
           </div>
         </div>

@@ -22,7 +22,7 @@ def _decimal(value: Any) -> Decimal | None:
         return None
     if isinstance(value, (int, float, Decimal)):
         try:
-            return Decimal(str(value)).quantize(Decimal("0.01"))
+            return Decimal(str(value))
         except InvalidOperation:
             return None
     text = str(value).strip().replace("$", "").replace(" ", "")
@@ -33,7 +33,7 @@ def _decimal(value: Any) -> Decimal | None:
     elif "," in text:
         text = text.replace(",", ".")
     try:
-        return Decimal(text).quantize(Decimal("0.01"))
+        return Decimal(text)
     except InvalidOperation:
         return None
 
@@ -144,11 +144,15 @@ def search_voucher_documents(
     store: str | None = None,
     reference: str | None = None,
     account: str | None = None,
+    store_code: str | None = None,
 ) -> dict[str, Any]:
     query_value = _decimal(value)
     if query_value is None:
         raise ValueError("El valor exacto no es válido.")
     query_date = _date(exact_date) if exact_date else None
+    if exact_date and query_date is None:
+        raise ValueError("La fecha exacta no es válida.")
+    requested_store = (store_code or store or "").strip()
     memo_rows, memo_issues = _read_spreadsheet(memorando_content, memorando_name)
     sources = [("memorando", memorando_name, memo_rows)]
     issues = list(memo_issues)
@@ -176,21 +180,42 @@ def search_voucher_documents(
                 continue
             results.append(item)
     for item in results:
-        item["status"] = "ENCONTRADO"
-        item["observation"] = "Coincidencia exacta de valor; fecha y filtros aplicados cuando fueron informados."
+        store_evidence = _normalize(item["store"])
+        if (
+            not requested_store
+            or not store_evidence
+            or "no verificado" in store_evidence
+            or _normalize(requested_store) not in store_evidence
+        ):
+            item["status"] = "PENDIENTE DE REVISIÓN"
+            item["observation"] = (
+                "El importe coincide exactamente, pero el documento no demuestra "
+                f"que pertenece al punto de venta {requested_store}."
+            )
+        else:
+            item["status"] = "PAGO VERIFICADO"
+            item["observation"] = "Importe exacto, fecha y punto de venta verificados."
     if len(results) > 1:
         for item in results:
-            item["status"] = "AMBIGUO"
-            item["observation"] = "Hay varios documentos con el mismo valor y filtros. Revise todas las evidencias."
+            item["status"] = "PENDIENTE DE REVISIÓN"
+            item["observation"] = "Hay varias coincidencias sin resolver. Revise todas las evidencias."
     return {
         "summary": {
             "documentos_procesados": len(sources),
             "coincidencias": len(results),
             "pendientes_revision": len(issues),
         },
-        "query": {"value": str(query_value), "date": query_date.isoformat() if query_date else None},
+        "query": {
+            "value": str(query_value),
+            "date": query_date.isoformat() if query_date else None,
+            "store_code": requested_store,
+        },
         "results": results,
         "issues": issues,
         "read_only": True,
-        "warning": "Consulta de solo lectura. Los documentos originales no se escriben ni se guardan.",
+        "warning": (
+            "Consulta de solo lectura. Los documentos originales no se escriben ni se guardan. "
+            "OneDrive/SharePoint y OCR empresarial no están configurados en este entorno; "
+            "PDF e imágenes quedan pendientes de revisión."
+        ),
     }

@@ -224,6 +224,7 @@ async def buscar_valor_voucher(
     voucher_files: list[UploadFile] = File(default=[]),
     value: str = Form(""),
     exact_date: str | None = Form(None),
+    store_code: str = Form(""),
     store: str | None = Form(None),
     reference: str | None = Form(None),
     account: str | None = Form(None),
@@ -232,6 +233,8 @@ async def buscar_valor_voucher(
         raise HTTPException(status_code=400, detail="Selecciona el memorando conciliado.")
     if not value.strip():
         raise HTTPException(status_code=400, detail="El valor exacto es obligatorio.")
+    if not store_code.strip():
+        raise HTTPException(status_code=400, detail="El código del punto de venta es obligatorio.")
     if not memorando_file.filename or not memorando_file.filename.lower().endswith((".xlsx", ".xlsm")):
         raise HTTPException(status_code=400, detail="El memorando debe ser un archivo Excel.")
     try:
@@ -246,6 +249,7 @@ async def buscar_valor_voucher(
             store,
             reference,
             account,
+            store_code=store_code,
         )
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error

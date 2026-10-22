@@ -115,6 +115,22 @@ cd frontend
 npm install
 npm run dev
 
+## Agente para buscar valores en voucher
+
+El módulo `POST /voucher/buscar` es una consulta independiente y de solo lectura.
+Exige el código del punto de venta y el valor exacto; una coincidencia de importe
+no se marca como `PAGO VERIFICADO` si el documento no contiene evidencia legible
+del punto de venta. Los estados pendientes se muestran en naranja claro y los
+pagos verificados en verde claro.
+
+Actualmente el proyecto no tiene configurados Microsoft Graph/SharePoint,
+OAuth empresarial ni un proveedor OCR autorizado. Por seguridad, los PDF e
+imágenes se reportan como `PENDIENTE DE REVISIÓN` y no se simulan resultados.
+Para habilitar la búsqueda empresarial se debe configurar en el backend una
+integración de solo lectura con permisos mínimos, resolución explícita de
+código de punto de venta a identificador de carpeta y un servicio OCR aprobado.
+Los secretos y tokens nunca deben llegar al frontend ni registrarse en logs.
+
 ## Variable de entorno frontend
 
 - VITE_API_URL

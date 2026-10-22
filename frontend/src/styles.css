@@ -49,7 +49,7 @@ input {
 .app-shell {
   min-height: calc(100vh - 20px);
   display: grid;
-  grid-template-columns: 270px minmax(0, 1fr);
+  grid-template-columns: 300px minmax(0, 1fr);
   background: #f6f8fc;
   border-radius: 28px;
   overflow: hidden;
@@ -99,7 +99,7 @@ input {
 
 .brand-logo {
   display: block;
-  width: min(220px, 100%);
+  width: min(260px, 100%);
   height: auto;
 }
 

@@ -368,11 +368,19 @@ class AdquirenciasConciliador:
     # ========================================================
 
     def _buscar_hoja_ccs(self):
-
+        candidates = []
         for ws in self.ccs_wb.worksheets:
             nombre = str(ws.title).strip().lower()
             if "2490" in nombre:
                 return ws
+
+            for row in ws.iter_rows(min_row=1, max_row=min(ws.max_row, 30)):
+                if any("2490" in self._normalize_header(cell.value) for cell in row):
+                    candidates.append(ws)
+                    break
+
+        if len(candidates) == 1:
+            return candidates[0]
 
         raise ValueError(
             "No se encontró la hoja correspondiente a la cuenta CCS 2490. "

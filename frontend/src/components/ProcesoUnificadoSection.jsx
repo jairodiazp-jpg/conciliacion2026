@@ -23,7 +23,7 @@ function downloadBase64(fileContent, name) {
   document.body.appendChild(link);
   link.click();
   link.remove();
-  URL.revokeObjectURL(url);
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function CloudIcon() {
@@ -84,22 +84,37 @@ function ProcesoUnificadoSection({ apiBase, view = "inicio" }) {
   const [result, setResult] = useState(null);
   const [resetToken, setResetToken] = useState(0);
 
-  const downloadResult = (payload) => {
+  const getDownloadItems = (payload) => {
     if (Array.isArray(payload?.files) && payload.files.length > 0) {
-      payload.files.forEach((item) => {
-        if (item?.file && item?.name) {
-          downloadBase64(item.file, item.name);
-        }
-      });
-      return;
+      return payload.files.filter((item) => item?.file && item?.name);
     }
 
+    const items = [];
     if (payload?.file) {
-      downloadBase64(payload.file, payload.output_name || "resultado.xlsx");
+      items.push({
+        file: payload.file,
+        name: payload.output_name || "resultado.xlsx",
+      });
     }
     if (payload?.secondary_file) {
-      downloadBase64(payload.secondary_file, payload.secondary_output_name || "resultado_secundario.xlsx");
+      items.push({
+        file: payload.secondary_file,
+        name: payload.secondary_output_name || "resultado_secundario.xlsx",
+      });
     }
+    return items;
+  };
+
+  const downloadItem = (item) => {
+    if (item?.file && item?.name) {
+      downloadBase64(item.file, item.name);
+    }
+  };
+
+  const downloadResult = (payload) => {
+    getDownloadItems(payload).forEach((item, index) => {
+      window.setTimeout(() => downloadItem(item), index * 400);
+    });
   };
 
   const handleProcess = async () => {
@@ -389,6 +404,21 @@ function ProcesoUnificadoSection({ apiBase, view = "inicio" }) {
       </div>
 
       {error && <p className="error">{error}</p>}
+      {result && getDownloadItems(result).length > 0 && (
+        <div className="result-downloads" aria-label="Archivos de resultados">
+          <strong>Archivos generados</strong>
+          {getDownloadItems(result).map((item) => (
+            <button
+              className="btn btn-ghost"
+              key={item.name}
+              onClick={() => downloadItem(item)}
+              type="button"
+            >
+              Descargar {item.name}
+            </button>
+          ))}
+        </div>
+      )}
     </section>
   );
 }

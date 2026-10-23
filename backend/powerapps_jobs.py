@@ -126,6 +126,17 @@ def _process(job: Job) -> dict[str, Any]:
             value_tolerance=float(options.get("tolerance_value", 0.01)),
             temporal_config=temporal,
         ).procesar()
+        if "query_file" in inputs and "memorando_file" in inputs:
+            query_result = conciliar_query_memorando(
+                inputs["query_file"],
+                inputs["memorando_file"],
+            )
+            result.setdefault("files", []).extend(
+                [
+                    query_result["query_file"],
+                    query_result["memorando_file"],
+                ]
+            )
     return result
 
 

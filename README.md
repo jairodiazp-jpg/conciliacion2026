@@ -136,7 +136,7 @@ Los secretos y tokens nunca deben llegar al frontend ni registrarse en logs.
 - VITE_API_URL
   - Ejemplo local: http://localhost:8000
 
-## API asíncrona para Power Apps y OneDrive
+## API asíncrona para Power Apps y descarga local
 
 La rama de integración agrega estos endpoints protegidos por el encabezado
 `X-PowerApps-Key`:
@@ -144,31 +144,27 @@ La rama de integración agrega estos endpoints protegidos por el encabezado
 - `POST /powerapps/jobs`: recibe `module` (`integrated`, `contable`, `pse`,
   `query` o `adquirencias`) y los archivos del módulo. Devuelve `job_id`.
 - `GET /powerapps/jobs/{job_id}`: devuelve `pending`, `processing`, `completed`
-  o `failed`, además de los archivos cargados en OneDrive cuando finaliza.
+  o `failed`, además de las rutas de descarga cuando finaliza.
+- `GET /powerapps/jobs/{job_id}/files/{file_id}`: entrega el Excel binario con
+  `Content-Disposition: attachment`; un navegador lo guarda en Descargas.
 
 El procesamiento reutiliza `ProcesadorIntegrado`, `ConciliadorContable`,
 `PseConciliador`, `AdquirenciasConciliador` y `conciliar_query_memorando`; no
 duplica sus reglas ni modifica el flujo web existente.
 
-La API no escribe en la carpeta Descargas ni expone archivos locales. Antes de
-habilitarla se deben configurar en el backend:
+La API no usa OneDrive ni Microsoft Graph. Los resultados se conservan
+temporalmente en memoria del backend y se descargan localmente mediante el
+navegador o el cliente que invoque el endpoint. Antes de habilitarla se debe
+configurar en el backend:
 
 ```text
 POWERAPPS_API_KEY
-MICROSOFT_TENANT_ID
-MICROSOFT_CLIENT_ID
-MICROSOFT_CLIENT_SECRET
-ONEDRIVE_DRIVE_ID
-ONEDRIVE_RESULTS_FOLDER_ID
 ```
 
-La aplicación de Microsoft Entra debe tener permisos mínimos aprobados para
-crear una subcarpeta privada por trabajo y cargar los Excel. Si falta cualquiera
-de estas variables, el trabajo termina en `failed` con un error explícito; no
-se simula una carga exitosa ni se conserva el resultado en almacenamiento local.
-La implementación actual usa memoria del proceso para los archivos de entrada,
-por lo que para producción en Render se requiere además un trabajador y un
-almacenamiento persistente/privado que sobrevivan a reinicios.
+Los archivos no sobreviven a un reinicio del backend y se deben purgar con una
+política de retención antes de usar esta modalidad en producción. Power Apps
+puede consultar el estado y abrir las rutas protegidas; la ubicación final del
+archivo depende de las políticas del dispositivo y del cliente.
 
 ## Deploy
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 
 from fastapi import BackgroundTasks, FastAPI, File, Form, Header, HTTPException, UploadFile
+from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from conciliador import ConciliadorContable
@@ -321,5 +322,35 @@ def powerapps_job_status(job_id: str, x_powerapps_key: str | None = Header(None)
     if job.error:
         response["error"] = job.error
     if job.status == "completed":
-        response["files"] = job.files
+        response["files"] = [
+            {
+                **file,
+                "download_path": f"/powerapps/jobs/{job.job_id}/files/{file['file_id']}",
+            }
+            for file in job.files
+        ]
     return response
+
+
+@app.get("/powerapps/jobs/{job_id}/files/{file_id}")
+def download_powerapps_file(
+    job_id: str,
+    file_id: str,
+    x_powerapps_key: str | None = Header(None),
+) -> Response:
+    _validate_powerapps_key(x_powerapps_key)
+    job = get_job(job_id)
+    if job is None or job.status != "completed":
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado o aún no completado.")
+    output = job.outputs.get(file_id)
+    if output is None:
+        raise HTTPException(status_code=404, detail="Archivo no encontrado o expirado.")
+    name, content = output
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f'attachment; filename="{name}"',
+            "Cache-Control": "no-store",
+        },
+    )

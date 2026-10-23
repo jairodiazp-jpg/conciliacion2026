@@ -136,6 +136,40 @@ Los secretos y tokens nunca deben llegar al frontend ni registrarse en logs.
 - VITE_API_URL
   - Ejemplo local: http://localhost:8000
 
+## API asíncrona para Power Apps y OneDrive
+
+La rama de integración agrega estos endpoints protegidos por el encabezado
+`X-PowerApps-Key`:
+
+- `POST /powerapps/jobs`: recibe `module` (`integrated`, `contable`, `pse`,
+  `query` o `adquirencias`) y los archivos del módulo. Devuelve `job_id`.
+- `GET /powerapps/jobs/{job_id}`: devuelve `pending`, `processing`, `completed`
+  o `failed`, además de los archivos cargados en OneDrive cuando finaliza.
+
+El procesamiento reutiliza `ProcesadorIntegrado`, `ConciliadorContable`,
+`PseConciliador`, `AdquirenciasConciliador` y `conciliar_query_memorando`; no
+duplica sus reglas ni modifica el flujo web existente.
+
+La API no escribe en la carpeta Descargas ni expone archivos locales. Antes de
+habilitarla se deben configurar en el backend:
+
+```text
+POWERAPPS_API_KEY
+MICROSOFT_TENANT_ID
+MICROSOFT_CLIENT_ID
+MICROSOFT_CLIENT_SECRET
+ONEDRIVE_DRIVE_ID
+ONEDRIVE_RESULTS_FOLDER_ID
+```
+
+La aplicación de Microsoft Entra debe tener permisos mínimos aprobados para
+crear una subcarpeta privada por trabajo y cargar los Excel. Si falta cualquiera
+de estas variables, el trabajo termina en `failed` con un error explícito; no
+se simula una carga exitosa ni se conserva el resultado en almacenamiento local.
+La implementación actual usa memoria del proceso para los archivos de entrada,
+por lo que para producción en Render se requiere además un trabajador y un
+almacenamiento persistente/privado que sobrevivan a reinicios.
+
 ## Deploy
 
 ### Frontend en Cloudflare Pages

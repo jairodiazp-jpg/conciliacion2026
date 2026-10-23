@@ -136,6 +136,36 @@ Los secretos y tokens nunca deben llegar al frontend ni registrarse en logs.
 - VITE_API_URL
   - Ejemplo local: http://localhost:8000
 
+## API asíncrona para Power Apps y descarga local
+
+La rama de integración agrega estos endpoints protegidos por el encabezado
+`X-PowerApps-Key`:
+
+- `POST /powerapps/jobs`: recibe `module` (`integrated`, `contable`, `pse`,
+  `query` o `adquirencias`) y los archivos del módulo. Devuelve `job_id`.
+- `GET /powerapps/jobs/{job_id}`: devuelve `pending`, `processing`, `completed`
+  o `failed`, además de las rutas de descarga cuando finaliza.
+- `GET /powerapps/jobs/{job_id}/files/{file_id}`: entrega el Excel binario con
+  `Content-Disposition: attachment`; un navegador lo guarda en Descargas.
+
+El procesamiento reutiliza `ProcesadorIntegrado`, `ConciliadorContable`,
+`PseConciliador`, `AdquirenciasConciliador` y `conciliar_query_memorando`; no
+duplica sus reglas ni modifica el flujo web existente.
+
+La API no usa OneDrive ni Microsoft Graph. Los resultados se conservan
+temporalmente en memoria del backend y se descargan localmente mediante el
+navegador o el cliente que invoque el endpoint. Antes de habilitarla se debe
+configurar en el backend:
+
+```text
+POWERAPPS_API_KEY
+```
+
+Los archivos no sobreviven a un reinicio del backend y se deben purgar con una
+política de retención antes de usar esta modalidad en producción. Power Apps
+puede consultar el estado y abrir las rutas protegidas; la ubicación final del
+archivo depende de las políticas del dispositivo y del cliente.
+
 ## Deploy
 
 ### Frontend en Cloudflare Pages

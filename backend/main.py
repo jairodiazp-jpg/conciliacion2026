@@ -278,6 +278,11 @@ async def create_powerapps_job(
     adquirencias_file: UploadFile | None = File(None),
     query_file: UploadFile | None = File(None),
     memorando_file: UploadFile | None = File(None),
+    tolerance_days: int = Form(1),
+    tolerance_value: float = Form(0.01),
+    temporal_tolerance_days: int = Form(0),
+    allow_previous_month: bool = Form(False),
+    allow_previous_year: bool = Form(False),
     x_powerapps_key: str | None = Header(None),
 ) -> dict:
     _validate_powerapps_key(x_powerapps_key)
@@ -301,9 +306,37 @@ async def create_powerapps_job(
             if not content:
                 raise HTTPException(status_code=400, detail=f"El archivo {name} está vacío.")
             inputs[name] = content
+
+    if module == "query":
+        # Accept query_interno_file as a backwards-compatible alias for query_file.
+        if "query_file" not in inputs and "query_interno_file" in inputs:
+            inputs["query_file"] = inputs["query_interno_file"]
+        if "query_file" not in inputs or "memorando_file" not in inputs:
+            raise HTTPException(
+                status_code=400,
+                detail="El cruce Query requiere query_file y memorando_file.",
+            )
+    elif module == "pse" and ("pse_file" not in inputs or "cruces_file" not in inputs):
+        raise HTTPException(status_code=400, detail="El cruce PSE requiere pse_file y cruces_file.")
+    elif module == "adquirencias" and ("adquirencias_file" not in inputs or "file" not in inputs):
+        raise HTTPException(
+            status_code=400,
+            detail="El cruce de adquirencias requiere adquirencias_file y file.",
+        )
+    elif module == "contable" and "file" not in inputs:
+        raise HTTPException(status_code=400, detail="El cruce contable requiere file.")
     if module == "integrated" and "file" not in inputs and "pse_file" not in inputs and "cruces_file" not in inputs:
         raise HTTPException(status_code=400, detail="Debes enviar al menos un archivo para el cruce integrado.")
-    job = create_job(inputs)
+    job = create_job(
+        inputs,
+        options={
+            "tolerance_days": tolerance_days,
+            "tolerance_value": tolerance_value,
+            "temporal_tolerance_days": temporal_tolerance_days,
+            "allow_previous_month": allow_previous_month,
+            "allow_previous_year": allow_previous_year,
+        },
+    )
     background_tasks.add_task(run_job, job)
     return {"job_id": job.job_id, "status": job.status, "created_at": job.created_at}
 

@@ -24,14 +24,18 @@ class Job:
     files: list[dict[str, str]] = field(default_factory=list)
     outputs: dict[str, tuple[str, bytes]] = field(default_factory=dict, repr=False)
     inputs: dict[str, bytes] = field(default_factory=dict, repr=False)
+    options: dict[str, int | float | bool] = field(default_factory=dict, repr=False)
 
 
 _jobs: dict[str, Job] = {}
 _jobs_lock = threading.Lock()
 
 
-def create_job(inputs: dict[str, bytes]) -> Job:
-    job = Job(job_id=uuid.uuid4().hex, inputs=inputs)
+def create_job(
+    inputs: dict[str, bytes],
+    options: dict[str, int | float | bool] | None = None,
+) -> Job:
+    job = Job(job_id=uuid.uuid4().hex, inputs=inputs, options=options or {})
     with _jobs_lock:
         _jobs[job.job_id] = job
     return job
@@ -50,24 +54,51 @@ def _set_job(job: Job, **values: Any) -> None:
 
 def _decode_files(result: dict[str, Any]) -> list[tuple[str, bytes]]:
     output: list[tuple[str, bytes]] = []
+    names: set[str] = set()
+
+    def add_file(name: Any, content: Any) -> None:
+        if not name or not content or str(name) in names:
+            return
+        decoded = base64.b64decode(content, validate=True)
+        output.append((str(name), decoded))
+        names.add(str(name))
+
     for item in result.get("files", []):
         name = item.get("name")
         content = item.get("file") or item.get("content")
-        if name and content:
-            output.append((str(name), base64.b64decode(content)))
-    if not output and result.get("file"):
-        output.append((str(result.get("output_name", "resultado.xlsx")), base64.b64decode(result["file"])))
+        add_file(name, content)
+
+    if result.get("file"):
+        add_file(result.get("output_name", "resultado.xlsx"), result["file"])
+
+    # Query/Memorando returns two named workbooks instead of a `files` list.
+    for key in ("query_file", "memorando_file"):
+        item = result.get(key)
+        if isinstance(item, dict):
+            add_file(item.get("name"), item.get("file") or item.get("content"))
+
     return output
 
 
 def _process(job: Job) -> dict[str, Any]:
     inputs = job.inputs
+    options = job.options
     module = inputs.get("__module__", b"").decode("utf-8") or "integrated"
-    temporal = ValidacionTemporalConfig()
+    temporal = ValidacionTemporalConfig(
+        tolerancia_dias=int(options.get("temporal_tolerance_days", 0)),
+        permitir_cruce_mes_anterior=bool(options.get("allow_previous_month", False)),
+        permitir_cruce_ano_anterior=bool(options.get("allow_previous_year", False)),
+    )
     if module == "contable":
         result = ConciliadorContable(inputs["file"], temporal_config=temporal).procesar()
     elif module == "pse":
-        result = PseConciliador(inputs["pse_file"], inputs["cruces_file"], temporal_config=temporal).procesar()
+        result = PseConciliador(
+            inputs["pse_file"],
+            inputs["cruces_file"],
+            date_tolerance_days=int(options.get("tolerance_days", 1)),
+            value_tolerance=float(options.get("tolerance_value", 0.01)),
+            temporal_config=temporal,
+        ).procesar()
     elif module == "query":
         result = conciliar_query_memorando(inputs["query_file"], inputs["memorando_file"])
     elif module == "adquirencias":
@@ -85,6 +116,8 @@ def _process(job: Job) -> dict[str, Any]:
             cruces_bytes=inputs.get("cruces_file"),
             query_interno_bytes=inputs.get("query_interno_file"),
             adquirencias_bytes=inputs.get("adquirencias_file"),
+            date_tolerance_days=int(options.get("tolerance_days", 1)),
+            value_tolerance=float(options.get("tolerance_value", 0.01)),
             temporal_config=temporal,
         ).procesar()
     return result

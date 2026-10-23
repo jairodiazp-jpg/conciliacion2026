@@ -71,6 +71,12 @@ def _decode_files(result: dict[str, Any]) -> list[tuple[str, bytes]]:
     if result.get("file"):
         add_file(result.get("output_name", "resultado.xlsx"), result["file"])
 
+    if result.get("secondary_file"):
+        add_file(
+            result.get("secondary_output_name", "resultado_secundario.xlsx"),
+            result["secondary_file"],
+        )
+
     # Query/Memorando returns two named workbooks instead of a `files` list.
     for key in ("query_file", "memorando_file"):
         item = result.get(key)

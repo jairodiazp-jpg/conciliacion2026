@@ -162,7 +162,11 @@ POWERAPPS_API_KEY
 ```
 
 Los archivos no sobreviven a un reinicio del backend y se deben purgar con una
-política de retención antes de usar esta modalidad en producción. Power Apps
+política de retención antes de usar esta modalidad en producción. Por defecto,
+los trabajos y sus resultados expiran después de una hora; se puede ajustar con
+`POWERAPPS_JOB_TTL_SECONDS`. `MAX_UPLOAD_BYTES` limita cada archivo a 50 MiB y
+`MAX_POWERAPPS_TOTAL_BYTES` limita cada solicitud de Power Apps a 250 MiB.
+Ambos valores se pueden configurar mediante variables de entorno. Power Apps
 puede consultar el estado y abrir las rutas protegidas; la ubicación final del
 archivo depende de las políticas del dispositivo y del cliente.
 

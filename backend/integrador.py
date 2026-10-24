@@ -492,16 +492,11 @@ class ProcesadorIntegrado:
                 out = BytesIO()
                 wb.save(out)
                 file_b64 = base64.b64encode(out.getvalue()).decode("utf-8")
-                
-                if contable_result is None:
-                    contable_result = {"file": file_b64, "resumen": {}}
-                else:
-                    contable_result["file"] = file_b64
-                
-                # Actualizar archivos de salida
-                files = [f for f in files if f["name"] != "CONCILIACION_CONTABLE.xlsx"]
-                files.insert(0, {
-                    "name": "CONCILIACION_CONTABLE.xlsx",
+
+                # Query Interno es un libro independiente. No debe reemplazar el
+                # contable acumulado, que ya contiene las anotaciones anteriores.
+                files.append({
+                    "name": "QUERY_INTERNO_CONCILIADO.xlsx",
                     "file": file_b64,
                 })
             except Exception as e:
@@ -750,4 +745,3 @@ class ProcesadorIntegrado:
         out = BytesIO()
         workbook.save(out)
         return base64.b64encode(out.getvalue()).decode('utf-8')
-

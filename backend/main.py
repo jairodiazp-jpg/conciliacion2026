@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import logging
 
 from fastapi import BackgroundTasks, FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.responses import Response
@@ -16,6 +17,12 @@ from powerapps_jobs import create_job, get_job, run_job
 
 
 APP_VERSION = get_app_version()
+logger = logging.getLogger(__name__)
+MAX_UPLOAD_BYTES = max(1, int(os.getenv("MAX_UPLOAD_BYTES", str(50 * 1024 * 1024))))
+MAX_POWERAPPS_TOTAL_BYTES = max(
+    MAX_UPLOAD_BYTES,
+    int(os.getenv("MAX_POWERAPPS_TOTAL_BYTES", str(250 * 1024 * 1024))),
+)
 
 app = FastAPI(title="Conciliador Contable API", version=APP_VERSION)
 
@@ -92,26 +99,36 @@ async def _procesar_archivos(
 
         if file is not None:
             contable_content = await file.read()
+            if len(contable_content) > MAX_UPLOAD_BYTES:
+                raise HTTPException(status_code=413, detail="El archivo contable supera el límite permitido.")
             if not contable_content:
                 raise HTTPException(status_code=400, detail="El archivo esta vacio")
 
         if pse_file is not None:
             pse_content = await pse_file.read()
+            if len(pse_content) > MAX_UPLOAD_BYTES:
+                raise HTTPException(status_code=413, detail="El archivo PSE supera el límite permitido.")
             if not pse_content:
                 raise HTTPException(status_code=400, detail="El archivo PSE esta vacio")
 
         if cruces_file is not None:
             cruces_content = await cruces_file.read()
+            if len(cruces_content) > MAX_UPLOAD_BYTES:
+                raise HTTPException(status_code=413, detail="El archivo de cruces supera el límite permitido.")
             if not cruces_content:
                 raise HTTPException(status_code=400, detail="El archivo de cruces contables esta vacio")
 
         if query_interno_file is not None:
             query_interno_content = await query_interno_file.read()
+            if len(query_interno_content) > MAX_UPLOAD_BYTES:
+                raise HTTPException(status_code=413, detail="El archivo Query Interno supera el límite permitido.")
             if not query_interno_content:
                 raise HTTPException(status_code=400, detail="El archivo de Query Interno esta vacio")
 
         if adquirencias_file is not None:
             adquirencias_content = await adquirencias_file.read()
+            if len(adquirencias_content) > MAX_UPLOAD_BYTES:
+                raise HTTPException(status_code=413, detail="El archivo de Adquirencias supera el límite permitido.")
             if not adquirencias_content:
                 raise HTTPException(status_code=400, detail="El archivo de Adquirencias esta vacio")
 
@@ -141,6 +158,7 @@ async def _procesar_archivos(
     except HTTPException:
         raise
     except Exception:
+        logger.exception("Error procesando archivos en /procesar")
         raise HTTPException(status_code=500, detail="Error procesando los archivos")
 
 
@@ -286,6 +304,7 @@ async def create_powerapps_job(
     x_powerapps_key: str | None = Header(None),
 ) -> dict:
     _validate_powerapps_key(x_powerapps_key)
+    total_bytes = 0
     allowed_modules = {"integrated", "contable", "pse", "query", "adquirencias"}
     if module not in allowed_modules:
         raise HTTPException(status_code=400, detail="Tipo de cruce no permitido.")
@@ -305,6 +324,11 @@ async def create_powerapps_job(
             content = await upload.read()
             if not content:
                 raise HTTPException(status_code=400, detail=f"El archivo {name} está vacío.")
+            if len(content) > MAX_UPLOAD_BYTES:
+                raise HTTPException(status_code=413, detail=f"El archivo {name} supera el límite permitido.")
+            total_bytes += len(content)
+            if total_bytes > MAX_POWERAPPS_TOTAL_BYTES:
+                raise HTTPException(status_code=413, detail="La solicitud supera el límite total permitido.")
             inputs[name] = content
 
     if module == "query":

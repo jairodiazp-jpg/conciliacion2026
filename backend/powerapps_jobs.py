@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import base64
+import logging
+import os
 import threading
 import uuid
 from dataclasses import dataclass, field
@@ -29,12 +31,15 @@ class Job:
 
 _jobs: dict[str, Job] = {}
 _jobs_lock = threading.Lock()
+_logger = logging.getLogger(__name__)
+_job_ttl_seconds = max(300, int(os.getenv("POWERAPPS_JOB_TTL_SECONDS", "3600")))
 
 
 def create_job(
     inputs: dict[str, bytes],
     options: dict[str, int | float | bool] | None = None,
 ) -> Job:
+    _cleanup_expired_jobs()
     job = Job(job_id=uuid.uuid4().hex, inputs=inputs, options=options or {})
     with _jobs_lock:
         _jobs[job.job_id] = job
@@ -42,8 +47,21 @@ def create_job(
 
 
 def get_job(job_id: str) -> Job | None:
+    _cleanup_expired_jobs()
     with _jobs_lock:
         return _jobs.get(job_id)
+
+
+def _cleanup_expired_jobs() -> None:
+    now = datetime.now(timezone.utc)
+    with _jobs_lock:
+        expired = [
+            job_id
+            for job_id, job in _jobs.items()
+            if (now - datetime.fromisoformat(job.created_at)).total_seconds() > _job_ttl_seconds
+        ]
+        for job_id in expired:
+            del _jobs[job_id]
 
 
 def _set_job(job: Job, **values: Any) -> None:
@@ -154,4 +172,5 @@ def run_job(job: Job) -> None:
             raise RuntimeError("El procesamiento no generó archivos Excel descargables.")
         _set_job(job, status="completed", files=files, outputs=outputs, inputs={})
     except Exception as error:
+        _logger.exception("Power Apps job failed: %s", job.job_id)
         _set_job(job, status="failed", error=str(error), inputs={})

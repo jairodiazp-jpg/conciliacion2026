@@ -164,15 +164,19 @@ input {
 }
 
 .status-dot {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   border-radius: 999px;
-  background: #e9f9ee;
-  color: var(--success);
+  background: #edf8f1;
+  color: #20a34a;
   display: grid;
   place-items: center;
-  font-size: 12px;
-  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.status-dot svg {
+  width: 18px;
+  height: 18px;
 }
 
 .sidebar-status div {
@@ -358,15 +362,19 @@ input {
 }
 
 .info-icon {
-  width: 16px;
-  height: 16px;
+  width: 17px;
+  height: 17px;
   border-radius: 999px;
   border: 1.5px solid #c5cedd;
   color: #8a94a6;
   display: grid;
   place-items: center;
-  font-size: 10px;
-  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.info-icon svg {
+  width: 13px;
+  height: 13px;
 }
 
 .ref-field input {

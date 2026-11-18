@@ -273,11 +273,48 @@ class ConciliadorContable:
                 candidates.append((idx, float(value)))
         return candidates
 
+    def _find_column_by_headers(
+        self,
+        sheet: Worksheet,
+        keywords: tuple[str, ...],
+        start_row: int = 1,
+        max_rows: int = 30,
+    ) -> int | None:
+        for row in sheet.iter_rows(
+            min_row=start_row,
+            max_row=min(sheet.max_row, start_row + max_rows - 1),
+            min_col=1,
+            max_col=sheet.max_column,
+        ):
+            for cell in row:
+                if not isinstance(cell.value, str):
+                    continue
+                header = self._normalizar_texto(cell.value)
+                if any(keyword in header for keyword in keywords):
+                    return cell.column
+        return None
+
+    def _find_section_header_columns(self, sheet: Worksheet) -> tuple[int | None, int | None, int | None]:
+        value_col = self._find_column_by_headers(
+            sheet,
+            ("valor", "monto", "importe"),
+        )
+        date_col = self._find_column_by_headers(
+            sheet,
+            ("fecha",),
+        )
+        approval_col = self._find_column_by_headers(
+            sheet,
+            ("aprob", "autoriz"),
+        )
+        return value_col, date_col, approval_col
+
     def _extraer_movimientos(self) -> list[LedgerEntry]:
         entries: list[LedgerEntry] = []
 
         for sheet in self.workbook.worksheets:
             current_section: str | None = None
+            value_col_hint, date_col_hint, approval_col_hint = self._find_section_header_columns(sheet)
 
             for row in sheet.iter_rows(min_row=1, max_row=sheet.max_row):
                 texts = [
@@ -296,7 +333,38 @@ class ConciliadorContable:
                 if current_section is None:
                     continue
 
-                value_candidates = self._parse_value_candidates(list(row), sheet)
+                row_headers = [
+                    self._normalizar_texto(str(cell.value))
+                    for cell in row
+                    if isinstance(cell.value, str) and str(cell.value).strip()
+                ]
+                if any("valor" in header or "monto" in header or "importe" in header for header in row_headers):
+                    value_col_hint = next(
+                        (cell.column for cell in row if isinstance(cell.value, str)
+                         and any(keyword in self._normalizar_texto(cell.value) for keyword in ("valor", "monto", "importe"))),
+                        value_col_hint,
+                    )
+                if any("fecha" in header for header in row_headers):
+                    date_col_hint = next(
+                        (cell.column for cell in row if isinstance(cell.value, str)
+                         and "fecha" in self._normalizar_texto(cell.value)),
+                        date_col_hint,
+                    )
+                if any("aprob" in header or "autoriz" in header for header in row_headers):
+                    approval_col_hint = next(
+                        (cell.column for cell in row if isinstance(cell.value, str)
+                         and any(keyword in self._normalizar_texto(cell.value) for keyword in ("aprob", "autoriz"))),
+                        approval_col_hint,
+                    )
+
+                if value_col_hint is not None:
+                    value_candidates = []
+                    value_cell = row[value_col_hint - 1]
+                    value = value_cell.value
+                    if isinstance(value, (int, float)) and not isinstance(value, bool):
+                        value_candidates = [(value_col_hint, float(value))]
+                else:
+                    value_candidates = self._parse_value_candidates(list(row), sheet)
                 if not value_candidates:
                     continue
 
@@ -306,16 +374,19 @@ class ConciliadorContable:
 
                 parsed_date: date | None = None
                 parsed_approval_number: str | None = None
-                parsed_number: str | None = None
 
-                if len(row) >= 6:
-                    parsed_approval_number = self._parse_number(row[5].value)
-
-                for cell in row:
-                    if parsed_date is None:
+                if date_col_hint is not None:
+                    parsed_date = parse_date(row[date_col_hint - 1].value)
+                if parsed_date is None:
+                    for cell in row:
                         parsed_date = parse_date(cell.value)
-                    if parsed_number is None:
-                        parsed_number = self._parse_number(cell.value)
+                        if parsed_date is not None:
+                            break
+
+                if approval_col_hint is not None:
+                    parsed_approval_number = self._parse_number(row[approval_col_hint - 1].value)
+                elif len(row) >= 6:
+                    parsed_approval_number = self._parse_number(row[5].value)
 
                 entries.append(
                     LedgerEntry(
@@ -326,7 +397,7 @@ class ConciliadorContable:
                         section=current_section,
                         raw_date=parsed_date,
                         approval_number=parsed_approval_number,
-                        number=parsed_number,
+                        number=parsed_approval_number,
                     )
                 )
 
@@ -459,23 +530,18 @@ class ConciliadorContable:
                 continue
 
             best_candidate: LedgerEntry | None = None
-            best_rank: tuple[int, int, int] | None = None
+            best_row: int | None = None
 
             for lower in lowers:
                 if lower.matched or lower.raw_date is None:
                     continue
-                permitida, prioridad, motivo, gap = self._temporal_evaluation(upper.raw_date, lower.raw_date)
-                if not permitida:
-                    if self._same_abs_value(upper.value, lower.value):
-                        self._log_temporal_rejection(upper, lower, motivo)
+                if upper.raw_date != lower.raw_date:
                     continue
-                if not self._is_confirmed_pair(upper, lower):
+                if not self._same_abs_value(upper.value, lower.value):
                     continue
-
-                candidate_rank = (prioridad or 99, gap or 999, lower.row)
-                if best_rank is None or candidate_rank < best_rank:
+                if best_row is None or lower.row < best_row:
                     best_candidate = lower
-                    best_rank = candidate_rank
+                    best_row = lower.row
 
             if best_candidate is None:
                 continue
@@ -492,7 +558,7 @@ class ConciliadorContable:
                 fecha=upper.raw_date,
                 confianza=0.9,
                 detalle=(
-                    f"Coincidencia de aprobacion, valor y fecha (±3 dias) entre "
+                    f"Coincidencia exacta de valor y fecha entre "
                     f"{upper.sheet_name}:fila {upper.row} y {best_candidate.sheet_name}:fila {best_candidate.row}"
                 ),
             )
@@ -606,19 +672,19 @@ class ConciliadorContable:
 
             key = int(round(abs(upper.value) * 100))
             candidates = lower_map.get(key, [])
-            ranked_candidates: list[tuple[int, int, LedgerEntry]] = []
+            ranked_candidates: list[tuple[int, LedgerEntry]] = []
             for item in candidates:
                 if item.matched:
                     continue
-                permitida, prioridad, motivo, gap = self._temporal_evaluation(upper.raw_date, item.raw_date)
-                if not permitida:
-                    self._log_temporal_rejection(upper, item, motivo)
+                if upper.raw_date is None or item.raw_date is None:
                     continue
-                ranked_candidates.append((prioridad or 99, gap or 999, item))
-            candidate = min(ranked_candidates, default=None, key=lambda item: (item[0], item[1], item[2].row))
+                if upper.raw_date != item.raw_date:
+                    continue
+                ranked_candidates.append((item.row, item))
+            candidate = min(ranked_candidates, default=None, key=lambda item: item[0])
             if candidate is None:
                 continue
-            candidate = candidate[2]
+            candidate = candidate[1]
 
             tag = f"Posible Cruce {self.possible_id}"
             upper.matched = True

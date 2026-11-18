@@ -13,6 +13,15 @@ function downloadBase64(fileContent, name) {
   URL.revokeObjectURL(url);
 }
 
+function QueryIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M6 3h8l4 4v14H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M14 3v5h5M8 12h6M8 16h4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function FilePicker({ title, file, onChange, onRemove, disabled }) {
   return (
     <div className="drop-card has-file">
@@ -75,7 +84,7 @@ function QueryMemorandoSection({ apiBase }) {
   return (
     <section className="upload-panel">
       <div className="panel-heading">
-        <span className="cloud-badge">Q</span>
+        <span className="cloud-badge"><QueryIcon /></span>
         <div>
           <h2>Conciliar Query y memorando ya conciliado</h2>
           <p>Proceso independiente con coincidencia exacta de cuenta, valor y fecha.</p>

@@ -11,3 +11,11 @@ frontend/dist/
 # OS
 .DS_Store
 Thumbs.db
+
+# Local samples and temporary output
+.continue/
+tmp/
+tmp_e2e/
+test.xlsx
+test_file.xlsx
+_clone_verify/

@@ -28,9 +28,18 @@ function downloadBase64(fileContent, name) {
 
 function CloudIcon() {
   return (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M7 18h10a4 4 0 0 0 .6-8 6 6 0 0 0-11.4-1.5A4.5 4.5 0 0 0 7 18Z" stroke="currentColor" strokeWidth="1.8" />
-      <path d="M12 11v6M12 11l-2.2 2.2M12 11l2.2 2.2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M7.2 18h9.6a4.2 4.2 0 0 0 .7-8.3A5.8 5.8 0 0 0 6.4 8.2 4.9 4.9 0 0 0 7.2 18Z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M12 10.5v6M9.5 14l2.5 2.5 2.5-2.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function InfoIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M12 11v5M12 8h.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     </svg>
   );
 }
@@ -334,7 +343,7 @@ function ProcesoUnificadoSection({ apiBase, view = "inicio" }) {
       <div className="refs-grid">
         <div className="ref-field">
           <label>
-            <span className="info-icon" title="Tolerancia en días para PSE">i</span>
+            <span className="info-icon" title="Tolerancia en días para PSE"><InfoIcon /></span>
             Valor de referencia
           </label>
           <input
@@ -349,14 +358,14 @@ function ProcesoUnificadoSection({ apiBase, view = "inicio" }) {
         </div>
         <div className="ref-field">
           <label>
-            <span className="info-icon">i</span>
+            <span className="info-icon"><InfoIcon /></span>
             Valor de referencia
           </label>
           <input type="text" disabled aria-hidden="true" />
         </div>
         <div className="ref-field">
           <label>
-            <span className="info-icon" title="Tolerancia en valor">i</span>
+            <span className="info-icon" title="Tolerancia en valor"><InfoIcon /></span>
             Valor de referencia
           </label>
           <input
@@ -371,7 +380,7 @@ function ProcesoUnificadoSection({ apiBase, view = "inicio" }) {
         </div>
         <div className="ref-field">
           <label>
-            <span className="info-icon">i</span>
+            <span className="info-icon"><InfoIcon /></span>
             Valor de referencia
           </label>
           <input type="text" disabled aria-hidden="true" />
@@ -380,24 +389,24 @@ function ProcesoUnificadoSection({ apiBase, view = "inicio" }) {
 
       <div className="action-row">
         <button className="btn btn-primary" onClick={handleProcess} disabled={loading}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-            <path d="M8 5v14l11-7z" />
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8" />
+            <path d="m10 8 6 4-6 4Z" fill="currentColor" stroke="currentColor" strokeLinejoin="round" />
           </svg>
           {loading ? "Procesando..." : "Procesar archivos"}
         </button>
         <button className="btn btn-secondary" onClick={() => downloadResult(result)} disabled={!result}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M12 4v10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-            <path d="M8 10l4 4 4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            <path d="M5 19h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 3v12M7.5 11l4.5 4.5 4.5-4.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M5 20h14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
           </svg>
           Descargar resultados
         </button>
         <span className="spacer" />
         <button className="btn btn-ghost" onClick={handleReset} disabled={loading}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M4 7h10a6 6 0 1 1 0 12H9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-            <path d="M8 3 4 7l4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M4.5 9A8 8 0 1 1 6 17.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            <path d="M4.5 4.5V9h4.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
           Limpiar
         </button>

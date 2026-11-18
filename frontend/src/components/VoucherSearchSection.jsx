@@ -1,5 +1,14 @@
 import { useState } from "react";
 
+function VoucherIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="10.5" cy="10.5" r="5.5" stroke="currentColor" strokeWidth="1.7" />
+      <path d="m14.5 14.5 5 5M8 10.5h5M10.5 8v5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function VoucherSearchSection({ apiBase }) {
   const [memorando, setMemorando] = useState(null);
   const [vouchers, setVouchers] = useState([]);
@@ -64,7 +73,7 @@ function VoucherSearchSection({ apiBase }) {
   return (
     <section className="upload-panel">
       <div className="panel-heading">
-        <span className="cloud-badge">⌕</span>
+        <span className="cloud-badge"><VoucherIcon /></span>
         <div>
           <h2>Agente para buscar valores en voucher</h2>
           <p>Consulta de solo lectura. Los documentos originales no se modifican.</p>

@@ -76,6 +76,60 @@ class TestRegresionExcel(unittest.TestCase):
             {ORANGE_FILL.start_color.rgb, GREEN_FILL.start_color.rgb, "FFFFA500", "FF92D050"},
         )
 
+    def test_cruce_contable_valor_y_fecha_exactos_sin_aprobacion(self) -> None:
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = "Cuenta 1110"
+        sheet.append(["Fecha", "Descripcion", "Valor", "Aprobacion"])
+        sheet.append(["sin registrar en libros"])
+        sheet.append(["2026-04-10", "Libros", 1000, None])
+        sheet.append(["sin registrar en el extracto"])
+        sheet.append(["2026-04-10", "Extracto", 1000, None])
+        buffer = BytesIO()
+        workbook.save(buffer)
+
+        resultado = ConciliadorContable(buffer.getvalue()).procesar()
+
+        self.assertEqual(resultado["resumen"]["cruzados"], 1)
+        tipos = [log["tipo"] for log in resultado["logs"]]
+        self.assertIn("valor_fecha", tipos)
+        self.assertNotIn("posible", tipos)
+
+    def test_cruce_contable_no_usa_fechas_distintas(self) -> None:
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = "Cuenta 1110"
+        sheet.append(["Fecha", "Descripcion", "Valor", "Aprobacion"])
+        sheet.append(["sin registrar en libros"])
+        sheet.append(["2026-04-10", "Libros", 1000, None])
+        sheet.append(["sin registrar en el extracto"])
+        sheet.append(["2026-04-12", "Extracto", 1000, None])
+        buffer = BytesIO()
+        workbook.save(buffer)
+
+        resultado = ConciliadorContable(buffer.getvalue()).procesar()
+
+        self.assertEqual(resultado["resumen"]["cruzados"], 0)
+        self.assertEqual(resultado["resumen"]["posibles"], 0)
+
+    def test_cruce_contable_toma_columna_valor_no_saldo_mayor(self) -> None:
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = "Cuenta 1110"
+        sheet.append(["Fecha", "Descripcion", "Saldo", "Valor", "Aprobacion"])
+        sheet.append(["sin registrar en libros"])
+        sheet.append(["2026-04-10", "Libros", 500000, 1000, "APR-1"])
+        sheet.append(["sin registrar en el extracto"])
+        sheet.append(["2026-04-10", "Extracto", 500000, 1000, "APR-1"])
+        buffer = BytesIO()
+        workbook.save(buffer)
+
+        resultado = ConciliadorContable(buffer.getvalue()).procesar()
+
+        self.assertEqual(resultado["resumen"]["cruzados"], 1)
+        cruzados = [log for log in resultado["logs"] if log["tipo"] in {"aprobacion", "valor_fecha"}]
+        self.assertTrue(all(log["valor"] == 1000 for log in cruzados))
+
 
 if __name__ == "__main__":
     unittest.main()

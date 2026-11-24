@@ -74,10 +74,26 @@ input {
   z-index: 2;
   display: flex;
   flex-direction: column;
-  gap: 28px;
-  padding: 28px 20px 20px;
+  gap: 24px;
+  padding: 30px 24px 24px;
   background: #fff;
   border-right: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.sidebar::after {
+  content: "";
+  position: absolute;
+  left: -70px;
+  bottom: -44px;
+  width: 440px;
+  height: 120px;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 38% 100%, rgba(79, 125, 255, 0.48) 0 30%, transparent 31%),
+    radial-gradient(ellipse at 70% 100%, rgba(47, 108, 255, 0.46) 0 35%, transparent 36%);
+  transform: rotate(-3deg);
+  opacity: 0.9;
 }
 
 .brand {
@@ -85,6 +101,9 @@ input {
   align-items: center;
   gap: 12px;
   padding: 0 8px;
+  min-height: 78px;
+  position: relative;
+  z-index: 1;
 }
 
 .brand-mark {
@@ -99,7 +118,7 @@ input {
 
 .brand-logo {
   display: block;
-  width: min(260px, 100%);
+  width: min(252px, 100%);
   height: auto;
 }
 
@@ -123,44 +142,99 @@ input {
 
 .nav-list {
   display: grid;
-  gap: 8px;
+  gap: 10px;
+  position: relative;
+  z-index: 1;
 }
 
 .nav-item {
   width: 100%;
-  border: 0;
-  background: transparent;
-  color: var(--muted-strong);
+  min-height: 82px;
+  border: 1.5px solid #e8edf6;
+  background: #fff;
+  color: #171b63;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
-  border-radius: 14px;
+  gap: 18px;
+  padding: 14px 18px;
+  border-radius: 16px;
   font-weight: 600;
   cursor: pointer;
   text-align: left;
+  font-size: 0.98rem;
+  line-height: 1.25;
+  box-shadow: 0 3px 10px rgba(27, 42, 74, 0.025);
+  transition:
+    background 180ms ease,
+    color 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+  position: relative;
+  overflow-wrap: anywhere;
 }
 
 .nav-item svg {
-  width: 19px;
-  height: 19px;
+  width: 38px;
+  height: 29px;
   flex-shrink: 0;
+  color: #1b347c;
+  stroke-width: 1.8;
+  padding-right: 9px;
+  border-right: 1px solid #dfe5f1;
 }
 
 .nav-item.active {
-  background: var(--accent-soft);
-  color: var(--accent);
+  border-color: transparent;
+  background: linear-gradient(135deg, #347cff 0%, #2464ec 100%);
+  color: #fff;
+  box-shadow: 0 12px 28px rgba(36, 100, 236, 0.22);
+}
+
+.nav-item.active svg {
+  color: #fff;
+  border-right-color: rgba(255, 255, 255, 0.55);
+}
+
+.nav-item:not(.active):hover,
+.nav-item:not(.active):focus-visible {
+  background: #edf4ff;
+  border-color: #cbdcff;
+  color: #1b347c;
+  box-shadow: 0 8px 18px rgba(79, 125, 255, 0.12);
+  transform: translateY(-1px);
+}
+
+.nav-item.active:hover,
+.nav-item.active:focus-visible {
+  background: linear-gradient(135deg, #3e85ff 0%, #1f5fe4 100%);
+  box-shadow: 0 14px 30px rgba(36, 100, 236, 0.28);
+  transform: translateY(-1px);
+}
+
+.nav-item:focus-visible {
+  outline: 3px solid rgba(79, 125, 255, 0.28);
+  outline-offset: 2px;
+}
+
+.nav-item.active::before,
+.nav-item:not(.active) {
+  isolation: isolate;
+}
+
+.nav-item.active::after {
+  content: "";
+  width: 11px;
+  height: 11px;
+  border-top: 3px solid #fff;
+  border-right: 3px solid #fff;
+  transform: rotate(45deg);
+  margin-left: auto;
+  flex-shrink: 0;
 }
 
 .sidebar-status {
-  margin-top: auto;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  padding: 14px 16px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: #fff;
+  display: none;
 }
 
 .status-dot {

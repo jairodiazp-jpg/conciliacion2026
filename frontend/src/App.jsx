@@ -59,6 +59,15 @@ function IconVoucher() {
   );
 }
 
+function IconContabilidad() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="3" y="4" width="18" height="16" rx="2" stroke="currentColor" strokeWidth="1.7" />
+      <path d="M7 8h10M7 12h3M14 12h3M7 16h3M14 16h3" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function StatusIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -96,6 +105,10 @@ function App() {
               <IconConfig />
               Configuración
             </button>
+            <button className={`nav-item ${view === "contabilidad-cruces" ? "active" : ""}`} onClick={() => setView("contabilidad-cruces")}>
+              <IconContabilidad />
+              Contabilidad cruces
+            </button>
             <button className={`nav-item ${view === "query-memorando" ? "active" : ""}`} onClick={() => setView("query-memorando")}>
               <IconQuery />
               Conciliar Query y memorando ya conciliado
@@ -117,7 +130,13 @@ function App() {
 
         <main className="workspace">
           <h1 className="page-title">
-            {view === "query-memorando" ? "Conciliar Query y memorando ya conciliado" : view === "voucher" ? "Agente para buscar valores en voucher" : "Automatización de pagos"}
+            {view === "contabilidad-cruces"
+              ? "Contabilidad cruces"
+              : view === "query-memorando"
+              ? "Conciliar Query y memorando ya conciliado"
+              : view === "voucher"
+              ? "Agente para buscar valores en voucher"
+              : "Automatización de pagos"}
           </h1>
           {view === "query-memorando"
             ? <QueryMemorandoSection apiBase={API_BASE} />

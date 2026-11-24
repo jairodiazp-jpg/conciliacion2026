@@ -137,15 +137,19 @@ function ProcesoUnificadoSection({ apiBase, view = "inicio" }) {
 
     try {
       const formData = new FormData();
-      if (pseFile) {
-        formData.append("pse_file", pseFile);
-      }
-      if (adquirenciasFile) {
-        formData.append("adquirencias_file", adquirenciasFile);
-      }
       if (memoFile) {
-        formData.append("file", memoFile);
-        formData.append("cruces_file", memoFile);
+        if (view === "contabilidad-cruces") {
+          formData.append("file", memoFile);
+        } else {
+          if (pseFile) {
+            formData.append("pse_file", pseFile);
+          }
+          if (adquirenciasFile) {
+            formData.append("adquirencias_file", adquirenciasFile);
+          }
+          formData.append("file", memoFile);
+          formData.append("cruces_file", memoFile);
+        }
       }
       formData.append("tolerance_days", String(dateTolerance));
       formData.append("tolerance_value", String(valueTolerance));
@@ -197,6 +201,52 @@ function ProcesoUnificadoSection({ apiBase, view = "inicio" }) {
 
   const contableResult = result?.contable || (result?.resumen && result?.logs ? result : null);
   const pseResult = result?.pse || (result?.dataset ? result : null);
+
+  if (view === "contabilidad-cruces") {
+    return (
+      <section className="upload-panel">
+        <div className="panel-heading">
+          <span className="cloud-badge"><CloudIcon /></span>
+          <h2>Contabilidad cruces</h2>
+        </div>
+
+        <div className="drop-grid">
+          <FileDropCard
+            title="Conciliación contable"
+            hint="Archivo requerido"
+            file={memoFile}
+            onFile={setMemoFile}
+            disabled={loading}
+            inputKey={`contabilidad-${resetToken}`}
+          />
+        </div>
+
+        <div className="action-row">
+          <button className="btn btn-primary" onClick={handleProcess} disabled={loading}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8" />
+              <path d="m10 8 6 4-6 4Z" fill="currentColor" stroke="currentColor" strokeLinejoin="round" />
+            </svg>
+            {loading ? "Procesando..." : "Procesar archivos"}
+          </button>
+          <button className="btn btn-secondary" onClick={() => downloadResult(result)} disabled={!result}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M12 3v12M7.5 11l4.5 4.5 4.5-4.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M5 20h14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
+            Descargar resultados
+          </button>
+          <span className="spacer" />
+          <button className="btn btn-ghost" onClick={handleReset} disabled={loading}>
+            Limpiar
+          </button>
+        </div>
+
+        {error && <p className="error">{error}</p>}
+        {contableResult && <Dashboard data={contableResult} loading={loading} />}
+      </section>
+    );
+  }
 
   if (view === "configuracion") {
     return (
